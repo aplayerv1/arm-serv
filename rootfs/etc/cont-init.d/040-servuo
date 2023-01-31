@@ -1,0 +1,8 @@
+#!/usr/bin/with-contenv bash
+. /opt/scripts/install.rc
+echo "================================================================================"
+echo "Running Treads"
+echo "================================================================================"
+echo ""
+
+/bin/su -s /bin/bash -c '/opt/scripts/run.sh'

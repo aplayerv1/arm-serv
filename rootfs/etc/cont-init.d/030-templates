@@ -1,0 +1,16 @@
+#!/usr/bin/with-contenv bash
+. /opt/scripts/install.rc;
+__check_status;
+
+echo "================================================================================"
+echo "Converting templates."
+echo "================================================================================"
+echo ""
+chmod 777 /opt/scripts/mm.pl
+
+dos2unix /opt/files/config/*
+
+/opt/scripts/mm.pl /opt/files/config/;
+lastexec=$?;
+__exit $lastexec;
+
