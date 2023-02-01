@@ -51,3 +51,21 @@ fi
 echo "DATA PATH set to ${_DATA_PATH}";
 echo -n "${_DATA_PATH}" > "${_CONTAINER_EV}/_DATA_PATH";
 echo "";
+
+export _ADMIN_NAME="${ADMIN_NAME:-admin}"
+if [[ "${_ADMIN_NAME}" =~ ^(.*)/$  ]]; then
+    export _ADMIN_NAME = "${BASH_REMATCH[1]}";
+fi
+echo "ADMIN NAME set to ${_ADMIN_NAME}";
+echo -n "${_ADMIN_NAME}" > "${_CONTAINER_EV}/_ADMIN_NAME";
+echo "";
+
+pass="$(echo "admin" | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev | tr '[:lower:]' '[:upper:]')"
+
+export _ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(echo "admin" | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev | tr '[:lower:]' '[:upper:]')}"
+if [[ "${_ADMIN_PASSWORD}" =~ ^(.*)/$ ]]; then
+    export _ADMIN_PASSWORD = $(echo "${BASH_REMATCH[1]}" | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev);
+fi
+echo "PASSWORD set to ${_PASSWORD}";
+echo -n "${_ADMIN_PASSWORD}" > "${_CONTAINER_EV}/_PASSWORD";
+echo "";
