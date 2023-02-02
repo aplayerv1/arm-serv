@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash
 
 if [[ "${__SCRIPT}x" == "x" ]]; then
     export __SCRIPT="$0";
