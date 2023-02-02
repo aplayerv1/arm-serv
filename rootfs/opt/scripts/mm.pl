@@ -47,7 +47,6 @@ while (my $f = readdir($tdh)) {
             $output_file=$1;
             print "Working on template: $f -> $output_file\n";
             $res = $mm->execute(handle => $fh, %tParms);
-            print $fw;
             open(my $fw, ">", "$output_file") or die("Could not write to file...");
             print $fw $res;
             close($fw);
