@@ -1,6 +1,5 @@
 #####/opt/ServUO/Config/Server.cfg#####
-
-Name=[+ $_SHARD_NAME +]
+Name=[+ $SHARD_NAME +]
 
 AutoDetect=True
 

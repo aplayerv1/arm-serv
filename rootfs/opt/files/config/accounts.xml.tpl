@@ -2,8 +2,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <accounts count="1">
 	<account>
-		<username>[+ $_ADMIN_NAME +]</username>
-		<newCryptPassword>{[+ $_ADMIN_PASSWORD +]}</newCryptPassword>
+		<username>[+ $ADMIN_NAME +]</username>
+		<newCryptPassword>{[+ $ADMIN_PASSWORD +]}</newCryptPassword>
 		<accessLevel>Owner</accessLevel>
 		<created>2023-01-31T11:39:43.849592Z</created>
 		<lastLogin>2023-01-31T11:39:43.849592Z</lastLogin>

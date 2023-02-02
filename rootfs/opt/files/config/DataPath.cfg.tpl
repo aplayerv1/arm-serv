@@ -1,2 +1,2 @@
 #####/opt/ServUO/Config/DataPath.cfg#####
-CustomPath=/opt/data
+CustomPath=[+ $DATA_PATH +]
