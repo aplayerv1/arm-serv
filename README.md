@@ -8,8 +8,8 @@ ServUO arm docker container
               network_mode: host
               environment:
                 - TZ=Europe/Paris
-                - ADMIN_NAME=admin
-                - ADMIN_PASSWORD=admin
+                - ADMIN_NAME=admin      #change me
+                - ADMIN_PASSWORD=admin  #change me 
               volumes:
                 - ./servuo:/opt/ServUO
                 - ./data:/opt/data
