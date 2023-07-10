@@ -1,0 +1,3 @@
+#!/bin/execlineb
+cd /opt/ServUO
+mono ServUO.exe -noconsole

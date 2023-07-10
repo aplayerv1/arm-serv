@@ -1,0 +1,9 @@
+#!/usr/bin/with-contenv bash
+. /opt/scripts/install.rc
+
+echo "================================================================================"
+echo "Starting Git ..."
+echo "================================================================================"
+echo "=== Getting pills."
+echo ""
+/bin/su -s /bin/bash -c '/opt/scripts/install_servuo.sh'

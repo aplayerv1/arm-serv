@@ -1,0 +1,71 @@
+#!/usr/bin/with-contenv bash
+. /opt/scripts/install.rc
+
+echo "================================================================================"
+echo "Starting installation ..."
+echo "================================================================================"
+echo "=== Checking for environment variables."
+echo ""
+
+export _CONTAINER_EV="/var/run/s6/container_environment";
+echo -n "${_CONTAINER_EV}" > "${_CONTAINER_EV}/_CONTAINER_EV";
+export _PATH_CONTINIT="/etc/cont-init.d";
+echo -n "${_PATH_CONTINIT}" > "${_CONTAINER_EV}/_PATH_CONTINIT";
+export _PATH_SERVICES="/etc/services.d";
+echo -n "${_PATH_SERVICES}" > "${_CONTAINER_EV}/_PATH_SERVICES";
+export _PATH_TZ="/usr/share/zoneinfo";
+echo -n "${_PATH_TZ}" > "${_CONTAINER_EV}/_PATH_TZ";
+
+
+if [[ "${TZ}" == "x" || ! -f "${_PATH_TZ}/${TZ}" ]]; then
+    export TZ="Europe/Berlin";
+fi
+echo "${TZ}" > "${_CONTAINER_EV}/TZ";
+
+export _PATH_CUSTOM_CONFIG="${PATH_CUSTOM_CONFIG:-}";
+if [[ "${_PATH_CUSTOM_CONFIG}x" != "x" ]]; then
+    if [[ "${_PATH_CUSTOM_CONFIG}" != "/" && ${_PATH_CUSTOM_CONFIG} =~ ^(.*)/$ ]]; then
+        export _PATH_CUSTOM_CONFIG="${BASH_REMATCH[1]}";
+    fi
+fi
+export _PATH_INSTALL_ROOT="${PATH_INSTALL_ROOT:-/opt/ServUO}";
+if [[ "${_PATH_INSTALL_ROOT}" =~ ^(.*)/$ ]]; then
+    export _PATH_INSTALL_ROOT="${BASH_REMATCH[1]}";
+fi
+echo "PATH_INSTALL_ROOT set to ${_PATH_INSTALL_ROOT}";
+echo -n "${_PATH_INSTALL_ROOT}" > "${_CONTAINER_EV}/_PATH_INSTALL_ROOT";
+echo "";
+
+export _SERVER_NAME="${SERVER_NAME:-MYSHARD}";
+if [[ "${_SERVER_NAME}" =~ ^(.*)/$ ]]; then
+    export _SERVER_NAME = "${BASH_REMATCH[1]}";
+fi
+echo "SERVER_NAME set to ${_SERVER_NAME}";
+echo -n "${_SERVER_NAME}" > "${_CONTAINER_EV}/_SERVER_NAME";
+echo "";
+
+export _DATA_PATH="${DATA_PATH:-/opt/data}";
+if [[ "${_DATA_PATH}" =~ ^(.*)/$  ]]; then
+    export _DATA_PATH = "${BASH_REMATCH[1]}";
+fi
+echo "DATA PATH set to ${_DATA_PATH}";
+echo -n "${_DATA_PATH}" > "${_CONTAINER_EV}/_DATA_PATH";
+echo "";
+
+export _ADMIN_NAME="${ADMIN_NAME:-admin}";
+if [[ "${_ADMIN_NAME}" =~ ^(.*)/$  ]]; then
+    export _ADMIN_NAME = "${BASH_REMATCH[1]}";
+fi
+echo "ADMIN NAME set to ${_ADMIN_NAME}";
+echo -n "${_ADMIN_NAME}" > "${_CONTAINER_EV}/_ADMIN_NAME";
+echo "";
+
+pass="$(echo 'admin' | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev | tr '[:lower:]' '[:upper:]')";
+
+export _ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(echo '$pass')}";
+if [[ "${_ADMIN_PASSWORD}" =~ ^(.*)/$ ]]; then
+    export _ADMIN_PASSWORD = "$(echo ${BASH_REMATCH[1]} | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev)";
+fi
+echo "PASSWORD set to ${_ADMIN_PASSWORD}";
+echo -n "$(echo ${_ADMIN_PASSWORD} | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev | tr '[:lower:]' '[:upper:]')" > "${_CONTAINER_EV}/_ADMIN_PASSWORD";
+echo "";
