@@ -24,12 +24,14 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     echo "================================================================================"
     echo ""
     cd /opt/ServUO
-    export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
-    export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
-    echo ""
-    echo "================================================================================"
-    echo "ORANGE"
-    echo "================================================================================"
-    dotnet build || exit 6;
+    # export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+    # export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
+    # echo ""
+    # echo "================================================================================"
+    # echo "ORANGE"
+    # echo "================================================================================"
+    # dotnet build || exit 6;
+    echo "_______________________________________________________________________________"
+    ./_makerelease || exit 6;
 fi
 exit 0;
