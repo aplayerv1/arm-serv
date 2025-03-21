@@ -11,7 +11,7 @@ LABEL maintainer "Aplayerv1"
 RUN apt-get update && apt-get install -y -q  wget make git pacman libcairo2-dev libjpeg62-turbo-dev libpango1.0-dev libgif-dev build-essential g++ git xz-utils dos2unix gettext-base curl unzip dirmngr gnupg apt-transport-https ca-certificates
 ADD https://github.com/just-containers/s6-overlay/releases/download/v3.1.3.0/s6-overlay-noarch.tar.xz /tmp
 RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz
-ADD "https://github.com/just-containers/s6-overlay/releases/download/v1.19.1.1/s6-overlay-aarch64.tar.gz" "/tmp/s6.tar.gz" 
+ADD "https://github.com/just-containers/s6-overlay/releases/download/v1.19.1.1/s6-overlay-amd64.tar.gz" "/tmp/s6.tar.gz" 
 RUN cd /tmp && tar xfz /tmp/s6.tar.gz -C /
 EXPOSE 2593
 ADD "https://dot.net/v1/dotnet-install.sh" "/opt/dotnet-install.sh" 
