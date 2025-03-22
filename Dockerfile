@@ -36,7 +36,18 @@ RUN wget -O /opt/dotnet-install.sh "https://dotnet.microsoft.com/download/dotnet
 
 COPY rootfs/ /
 
-RUN ls /etc/cont-init.d/ && sleep 5
+# Debug: List files to verify they're copied correctly
+RUN ls -la /etc/cont-init.d/ && \
+    ls -la /etc/services.d/servuo/
+
+# Fix permissions and line endings for all scripts
+RUN chmod -R 755 /etc/cont-init.d && \
+    chmod -R 755 /etc/services.d && \
+    find /etc/cont-init.d -type f -exec dos2unix {} \; && \
+    find /etc/services.d -type f -exec dos2unix {} \; && \
+    chmod -R 755 /opt/scripts && \
+    find /opt/scripts -type f -exec dos2unix {} \;
+
 
 RUN mkdir -p /var/run/s6/etc/cont-init.d/ 
 
