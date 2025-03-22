@@ -34,7 +34,7 @@ RUN wget -O /opt/dotnet-install.sh "https://dotnet.microsoft.com/download/dotnet
     chmod +x /opt/dotnet-install.sh && \
     cd /opt && ./dotnet-install.sh
 
-COPY rootfs/* /
+COPY rootfs/ /
 
 RUN mkdir -p /var/run/s6/etc/cont-init.d/ && ls /etc/cont-init.d/ && sleep 2
 
