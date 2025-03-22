@@ -36,13 +36,14 @@ RUN wget -O /opt/dotnet-install.sh "https://dotnet.microsoft.com/download/dotnet
 
 COPY rootfs/ /
 
-RUN mkdir -p /var/run/s6/etc/cont-init.d/
+RUN mkdir -p /var/run/s6/etc/cont-init.d/ && ls /etc/cont-init.d/ && sleep 2
 
 RUN for file in /etc/cont-init.d/*; do \
     dos2unix $file; \
     chmod a+xwr $file; \
     done && \
-    dos2unix /opt/scripts/*
+    dos2unix /opt/scripts/* && \
+    mv /opt/scripts/* /etc/cont-init.d/
 
 RUN for file in /etc/services.d/servuo/*; do \
     dos2unix $file; \
