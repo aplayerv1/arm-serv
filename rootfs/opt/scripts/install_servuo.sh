@@ -4,8 +4,6 @@ FILE=/opt/ServUO/ServUO.exe
 echo "================================================================================"
 echo "Running install_serv.sh as $(whoami)".
 echo "================================================================================"
-apt-get update 
-apt-get install -y mono-devel rsync nano
 echo ""
 echo "================================================================================"
 echo "ServUO git check"

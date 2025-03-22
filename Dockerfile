@@ -72,4 +72,6 @@ RUN ls -la /usr/bin/with-contenv || echo "with-contenv not found in /usr/bin" &&
 
 RUN yes | perl -MCPAN -e 'install Text::MicroMason'
 
+RUN DEBIAN_FRONTEND=noninteractive apt-get -yq install mono-devel rsync nano
+
 ENTRYPOINT [ "/init" ]
