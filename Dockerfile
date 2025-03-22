@@ -45,9 +45,7 @@ COPY rootfs/ /
 
 # Fix permissions and line endings for all scripts
 RUN chmod -R 755 /etc/cont-init.d && \
-    chmod -R 755 /etc/services.d && \
     find /etc/cont-init.d -type f -exec dos2unix {} \; && \
-    find /etc/services.d -type f -exec dos2unix {} \; && \
     chmod -R 755 /opt/scripts && \
     find /opt/scripts -type f -exec dos2unix {} \;
 
