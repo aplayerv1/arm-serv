@@ -5,16 +5,6 @@ ARG S6_VERSION="v3.1.3.0"
 # Auto-detect architecture
 ARG TARGETARCH
 
-# Set S6_ARCH based on detected architecture
-ARG S6_ARCH
-# Default to amd64, but use aarch64 if TARGETARCH is arm64
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-      echo "aarch64" > /tmp/s6arch; \
-    else \
-      echo "$TARGETARCH" > /tmp/s6arch; \
-    fi && \
-    export S6_ARCH=$(cat /tmp/s6arch)
-
 ARG LANG="en_US.UTF-8"
 ARG LC_ALL="C.UTF-8"
 ARG LANGUAGE="en_US.UTF-8"
@@ -26,18 +16,16 @@ LABEL maintainer "Aplayerv1"
 
 RUN apt-get update && apt-get install -y -q wget mono-devel mono-mcs make git pacman libcairo2-dev libjpeg62-turbo-dev libpango1.0-dev libgif-dev build-essential g++ git xz-utils dos2unix gettext-base curl unzip dirmngr gnupg apt-transport-https ca-certificates
 
-ADD https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-noarch.tar.xz /tmp
-
-RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz
-
-# Use a shell script to determine the correct architecture name
+# Download and install s6-overlay
 RUN if [ "$TARGETARCH" = "arm64" ]; then \
       S6_ARCH="aarch64"; \
     else \
-      S6_ARCH="$TARGETARCH"; \
+      S6_ARCH="x86_64"; \
     fi && \
-    wget -O /tmp/s6-arch.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
-    tar -C / -Jxpf /tmp/s6-arch.tar.xz
+    wget -O /tmp/s6-overlay-noarch.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-noarch.tar.xz" && \
+    tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
+    wget -O /tmp/s6-overlay-arch.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
+    tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz
 
 EXPOSE 2593
 
