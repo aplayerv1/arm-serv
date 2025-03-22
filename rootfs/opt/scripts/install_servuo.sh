@@ -24,6 +24,7 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     echo "================================================================================"
     echo ""
     cd /opt/ServUO
+    ln -s /root/.dotnet/dotnet /usr/local/bin/dotnet
     export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
     export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
     echo ""
