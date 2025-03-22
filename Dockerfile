@@ -4,8 +4,18 @@ ARG DEBIAN_FRONTEND="noninteractive"
 ARG S6_VERSION="v3.1.3.0"
 # Auto-detect architecture
 ARG TARGETARCH
-# Set S6_ARCH based on detected architecture
-ARG S6_ARCH=${TARGETARCH:-amd64}
+
+# Map Docker's architecture names to S6 overlay architecture names
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      echo "aarch64" > /tmp/s6arch; \
+    else \
+      echo "$TARGETARCH" > /tmp/s6arch; \
+    fi
+
+# Set S6_ARCH based on the mapping
+ARG S6_ARCH
+ENV S6_ARCH=${S6_ARCH:-$(cat /tmp/s6arch)}
+
 ARG LANG="en_US.UTF-8"
 ARG LC_ALL="C.UTF-8"
 ARG LANGUAGE="en_US.UTF-8"
@@ -21,14 +31,11 @@ ADD https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION
 
 RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz
 
-# Use the detected architecture for S6 overlay
+# Use the mapped architecture name for S6 overlay
 ADD "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" "/tmp/s6-arch.tar.xz"
 RUN tar -C / -Jxpf /tmp/s6-arch.tar.xz
 
-# Remove the old S6 overlay installation that used a hardcoded architecture
-# ADD "https://github.com/just-containers/s6-overlay/releases/download/v1.19.1.1/s6-overlay-amd64.tar.gz" "/tmp/s6.tar.gz"
-# RUN cd /tmp && tar xfz /tmp/s6.tar.gz -C /
-
+# Rest of your Dockerfile remains the same
 EXPOSE 2593
 
 ADD "https://dot.net/v1/dotnet-install.sh" "/opt/dotnet-install.sh"
