@@ -36,7 +36,9 @@ RUN wget -O /opt/dotnet-install.sh "https://dotnet.microsoft.com/download/dotnet
 
 COPY rootfs/ /
 
-RUN mkdir -p /var/run/s6/etc/cont-init.d/ && ls /etc/cont-init.d/ && sleep 2
+RUN ls /etc/cont-init.d/ && sleep 5
+
+RUN mkdir -p /var/run/s6/etc/cont-init.d/ 
 
 RUN for file in /etc/cont-init.d/*; do \
     dos2unix $file; \
