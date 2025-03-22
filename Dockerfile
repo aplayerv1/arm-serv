@@ -14,9 +14,9 @@ RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz
 ADD "https://github.com/just-containers/s6-overlay/releases/download/v1.19.1.1/s6-overlay-amd64.tar.gz" "/tmp/s6.tar.gz" 
 RUN cd /tmp && tar xfz /tmp/s6.tar.gz -C /
 EXPOSE 2593
-# ADD "https://dot.net/v1/dotnet-install.sh" "/opt/dotnet-install.sh" 
-# RUN cd /opt && chmod +x dotnet-install.sh && ls
-# RUN cd /opt  && ./dotnet-install.sh --version 5.0.400
+ADD "https://dot.net/v1/dotnet-install.sh" "/opt/dotnet-install.sh" 
+RUN cd /opt && chmod +x dotnet-install.sh && ls
+RUN cd /opt  && ./dotnet-install.sh 
 COPY rootfs/ /
 RUN mkdir -p /var/run/s6/etc/cont-init.d/ 
 RUN for file in /etc/cont-init.d/*; do \
