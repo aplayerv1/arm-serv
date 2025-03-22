@@ -27,6 +27,17 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     wget -O /tmp/s6-overlay-arch.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
     tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz
 
+# Install additional S6 components
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      S6_ARCH="aarch64"; \
+    else \
+      S6_ARCH="x86_64"; \
+    fi && \
+    wget -O /tmp/s6-overlay-symlinks.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-symlinks-${S6_ARCH}.tar.xz" && \
+    tar -C / -Jxpf /tmp/s6-overlay-symlinks.tar.xz && \
+    wget -O /tmp/s6-overlay-syslogng.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/syslogng-overlay-noarch.tar.xz" && \
+    tar -C / -Jxpf /tmp/s6-overlay-syslogng.tar.xz
+
 EXPOSE 2593
 
 # Use the full URL from Microsoft for the dotnet-install script
@@ -34,11 +45,8 @@ RUN wget -O /opt/dotnet-install.sh "https://dotnet.microsoft.com/download/dotnet
     chmod +x /opt/dotnet-install.sh && \
     cd /opt && ./dotnet-install.sh
 
+# Copy rootfs content
 COPY rootfs/ /
-
-# Debug: List files to verify they're copied correctly
-RUN ls -la /etc/cont-init.d/ && \
-    ls -la /etc/services.d/servuo/
 
 # Fix permissions and line endings for all scripts
 RUN chmod -R 755 /etc/cont-init.d && \
@@ -48,24 +56,15 @@ RUN chmod -R 755 /etc/cont-init.d && \
     chmod -R 755 /opt/scripts && \
     find /opt/scripts -type f -exec dos2unix {} \;
 
+# Fix shebang lines in scripts
+RUN sed -i 's|#!/usr/bin/with-contenv bash|#!/bin/bash|g' /etc/cont-init.d/* && \
+    sed -i 's|#!/usr/bin/with-contenv bash|#!/bin/bash|g' /etc/services.d/servuo/* && \
+    echo "Modified shebang lines to use standard bash"
+
+# Verify the changes
 RUN head -n 1 /etc/cont-init.d/* && \
     echo "Script permissions after fix:" && \
     ls -la /etc/cont-init.d/
-
-RUN mkdir -p /var/run/s6/etc/cont-init.d/ 
-
-RUN for file in /etc/cont-init.d/*; do \
-    dos2unix $file; \
-    chmod a+xwr $file; \
-    done && \
-    dos2unix /opt/scripts/*
-
-RUN for file in /etc/services.d/servuo/*; do \
-    dos2unix $file; \
-    chmod a+xwr $file; \
-    done
-
-RUN chmod +x -R /opt/scripts
 
 RUN yes | perl -MCPAN -e 'install Text::MicroMason'
 
