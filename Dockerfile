@@ -29,11 +29,10 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 
 EXPOSE 2593
 
-ADD "https://dot.net/v1/dotnet-install.sh" "/opt/dotnet-install.sh"
-
-RUN cd /opt && chmod +x dotnet-install.sh && ls
-
-RUN cd /opt && ./dotnet-install.sh
+# Use the full URL from Microsoft for the dotnet-install script
+RUN wget -O /opt/dotnet-install.sh "https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh" && \
+    chmod +x /opt/dotnet-install.sh && \
+    cd /opt && ./dotnet-install.sh
 
 COPY rootfs/ /
 
