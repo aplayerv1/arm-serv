@@ -48,6 +48,9 @@ RUN chmod -R 755 /etc/cont-init.d && \
     chmod -R 755 /opt/scripts && \
     find /opt/scripts -type f -exec dos2unix {} \;
 
+RUN head -n 1 /etc/cont-init.d/* && \
+    echo "Script permissions after fix:" && \
+    ls -la /etc/cont-init.d/
 
 RUN mkdir -p /var/run/s6/etc/cont-init.d/ 
 
