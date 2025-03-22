@@ -32,6 +32,7 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     # echo "================================================================================"
     # dotnet build || exit 6;
     echo "_______________________________________________________________________________"
-    ./_makerelease || exit 6;
+    chmod +x _makerelease
+    ./_makerelease
 fi
 exit 0;
