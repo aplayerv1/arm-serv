@@ -5,16 +5,15 @@ ARG S6_VERSION="v3.1.3.0"
 # Auto-detect architecture
 ARG TARGETARCH
 
-# Map Docker's architecture names to S6 overlay architecture names
+# Set S6_ARCH based on detected architecture
+ARG S6_ARCH
+# Default to amd64, but use aarch64 if TARGETARCH is arm64
 RUN if [ "$TARGETARCH" = "arm64" ]; then \
       echo "aarch64" > /tmp/s6arch; \
     else \
       echo "$TARGETARCH" > /tmp/s6arch; \
-    fi
-
-# Set S6_ARCH based on the mapping
-ARG S6_ARCH
-ENV S6_ARCH=${S6_ARCH:-$(cat /tmp/s6arch)}
+    fi && \
+    export S6_ARCH=$(cat /tmp/s6arch)
 
 ARG LANG="en_US.UTF-8"
 ARG LC_ALL="C.UTF-8"
@@ -31,11 +30,15 @@ ADD https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION
 
 RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz
 
-# Use the mapped architecture name for S6 overlay
-ADD "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" "/tmp/s6-arch.tar.xz"
-RUN tar -C / -Jxpf /tmp/s6-arch.tar.xz
+# Use a shell script to determine the correct architecture name
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      S6_ARCH="aarch64"; \
+    else \
+      S6_ARCH="$TARGETARCH"; \
+    fi && \
+    wget -O /tmp/s6-arch.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/${S6_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
+    tar -C / -Jxpf /tmp/s6-arch.tar.xz
 
-# Rest of your Dockerfile remains the same
 EXPOSE 2593
 
 ADD "https://dot.net/v1/dotnet-install.sh" "/opt/dotnet-install.sh"
