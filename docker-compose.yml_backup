@@ -1,0 +1,15 @@
+version: '3'
+services:
+  servuo:
+   image: aplayerv1/servuo:0.0.19-amd64
+   restart: always
+   network_mode: host
+   environment:
+     - TZ=Europe/Paris
+     - ADMIN_NAME=admin      #change me
+     - ADMIN_PASSWORD=admin  #change me 
+     - SERVER_NAME=test
+     - S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
+   volumes:
+     - ./servuo:/opt/ServUO
+     - ./data:/opt/data

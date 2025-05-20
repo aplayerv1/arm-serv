@@ -1,0 +1,22 @@
+#!/usr/bin/with-contenv bash
+. /opt/scripts/install.rc;
+__check_status;
+
+echo "================================================================================"
+echo "Converting templates."
+echo "================================================================================"
+echo ""
+chmod 777 /opt/scripts/mm.pl;
+
+dos2unix /opt/files/config/*;
+
+rm -r /opt/ServUO/Saves/Accounts/accounts.xml;
+mkdir -p /opt/ServUO/Saves/Accounts;
+chmod 777 /opt/ServUO/Saves/Accounts/;
+
+/opt/scripts/mm.pl /opt/files/config/;
+
+
+lastexec=$?;
+__exit $lastexec;
+
