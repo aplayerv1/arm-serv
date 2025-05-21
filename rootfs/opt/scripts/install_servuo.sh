@@ -46,9 +46,8 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
     cd /opt/ServUO
 
-    # dotnet build
-    mcs -sdk:4.5 -out:Ultima.dll -optimize+ -unsafe -target:library -r:System,System.Configuration.Install,System.Data,System.Drawing,System.EnterpriseServices,System.Management,System.Security,System.ServiceProcess,System.Web,System.Web.Services,System.Windows.Forms,System.Xml -nowarn:219,414,618 -recurse:Ultima/*.cs
-    csc -out:ServUO.exe -optimize+ -unsafe -target:exe -recurse:Server/*.cs -r:Ultima.dll,Scripts.dll
+    DOTNET_CLI_HOME=/opt/ServUO dotnet build --self-contained true -p:PublishSingleFile=false
+
     chmod -R 777 /opt/ServUO/
 
 else
