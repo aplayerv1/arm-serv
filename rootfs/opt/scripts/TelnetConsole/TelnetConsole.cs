@@ -8,6 +8,9 @@ using System.Linq;
 using Server;
 using Server.Commands;
 using Server.Mobiles;
+using Server.Accounting;
+using Server.Misc;
+
 
 namespace Server.Custom
 {
@@ -18,8 +21,10 @@ namespace Server.Custom
         private static int _port = 6003;
         private static int _maxPort = 6010;
 
-        // Create a fake admin Mobile to run commands with
-        private static Mobile _fakeAdmin;
+        // Configuration
+        private static readonly string[] AllowedIPs = { "127.0.0.1", "10.10.1.230" }; // Add IPs here
+        private static readonly bool PersistFakeAdmin = false;
+        private static readonly string LogPath = "Logs/TelnetCommands.log";
 
         public static void Initialize()
         {
@@ -27,15 +32,6 @@ namespace Server.Custom
             {
                 Console.WriteLine("[TelnetConsole] Already initialized.");
                 return;
-            }
-
-            // Initialize fake admin only once
-            if (_fakeAdmin == null)
-            {
-                _fakeAdmin = new Mobile()
-                {
-                    AccessLevel = AccessLevel.Administrator
-                };
             }
 
             bool started = false;
@@ -83,6 +79,15 @@ namespace Server.Custom
                 try
                 {
                     TcpClient client = _listener.AcceptTcpClient();
+                    var endpoint = client.Client.RemoteEndPoint as IPEndPoint;
+
+                    if (endpoint == null || !AllowedIPs.Contains(endpoint.Address.ToString()))
+                    {
+                        Console.WriteLine("[TelnetConsole] Rejected connection from " + endpoint?.Address);
+                        client.Close();
+                        continue;
+                    }
+
                     Thread clientThread = new Thread(() => HandleClient(client));
                     clientThread.IsBackground = true;
                     clientThread.Start();
@@ -104,8 +109,7 @@ namespace Server.Custom
             {
                 stream = client.GetStream();
                 reader = new StreamReader(stream, Encoding.ASCII);
-                writer = new StreamWriter(stream, Encoding.ASCII);
-                writer.AutoFlush = true;
+                writer = new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true };
 
                 writer.Write("Username: ");
                 string username = reader.ReadLine();
@@ -130,26 +134,33 @@ namespace Server.Custom
                     }
 
                     string commandText = line;
+                    string logEntry = $"[{DateTime.Now}] {username}: {commandText}";
+                    File.AppendAllText(LogPath, logEntry + Environment.NewLine);
 
                     Timer.DelayCall(TimeSpan.Zero, () =>
                     {
                         try
                         {
-                            // Try to find a real admin player first
-                            Mobile admin = World.Mobiles.Values
-                                .FirstOrDefault(m => m.AccessLevel >= AccessLevel.Administrator);
+                            Mobile admin = World.Mobiles.Values.FirstOrDefault(m => m.AccessLevel >= AccessLevel.Administrator);
+                            bool createdFake = false;
 
-                            if (admin != null)
+                            if (admin == null)
                             {
-                                CommandSystem.Handle(admin, CommandSystem.Prefix + commandText);
-                            }
-                            else
-                            {
-                                // Use the fake admin to run commands
-                                CommandSystem.Handle(_fakeAdmin, CommandSystem.Prefix + commandText);
+                                admin = CreateFakeAdmin();
+                                createdFake = true;
                             }
 
+                            CommandSystem.Handle(admin, CommandSystem.Prefix + commandText);
                             Console.WriteLine("[TelnetConsole] Executed command: " + commandText);
+
+                            if (createdFake && !PersistFakeAdmin)
+                            {
+                                Timer.DelayCall(TimeSpan.FromSeconds(5), () =>
+                                {
+                                    if (admin != null && !admin.Deleted)
+                                        admin.Delete();
+                                });
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -166,11 +177,46 @@ namespace Server.Custom
             }
             finally
             {
-                if (writer != null) writer.Dispose();
-                if (reader != null) reader.Dispose();
-                if (stream != null) stream.Dispose();
+                writer?.Dispose();
+                reader?.Dispose();
+                stream?.Dispose();
                 client.Close();
             }
         }
+
+        private static Mobile CreateFakeAdmin()
+        {
+            string username = "FakeAdmin";
+            string password = "changeme";
+
+            Account account = Accounts.GetAccount(username) as Account;
+
+            if (account == null)
+            {
+                account = new Account(username, password);
+                Accounts[username] = account; // ✅ Add account directly to dictionary
+            }
+
+            account.AccessLevel = AccessLevel.Administrator;
+
+            PlayerMobile fake = new PlayerMobile
+            {
+                Name = "FakeAdmin",
+                AccessLevel = AccessLevel.Administrator,
+                Hidden = true,
+                Body = 400,
+                Hue = 0,
+                Female = false,
+                Blessed = true,
+                CantWalk = true,
+                Account = account
+            };
+
+            World.AddMobile(fake);
+            fake.MoveToWorld(new Point3D(0, 0, 0), Map.Felucca);
+
+            return fake;
+        }
     }
+    
 }
