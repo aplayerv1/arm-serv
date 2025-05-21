@@ -57,7 +57,6 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     mcs -r:ServUO.exe GeneratePasswordHash.cs
     ADMIN_PASSWORD_HASH=$(mono GeneratePasswordHash.exe "$ADMIN_PASSWORD")
     sed -i "s|<newCryptPassword>.*</newCryptPassword>|<newCryptPassword>${ADMIN_PASSWORD_HASH}</newCryptPassword>|" /opt/ServUO/Saves/Accounts/accounts.xml
-
 else
     echo "ServUO already built — skipping clone and build steps."
 fi
