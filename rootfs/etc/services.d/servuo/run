@@ -1,3 +1,5 @@
 #!/bin/execlineb
 cd /opt/ServUO
-mono ServUO.exe -noconsole
+export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
+mono ServUO.exe -debug -noconsole

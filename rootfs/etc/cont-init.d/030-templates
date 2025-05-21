@@ -9,7 +9,7 @@ echo ""
 chmod 777 /opt/scripts/mm.pl;
 
 dos2unix /opt/files/config/*;
-if [ ! -f /opt/ServUO/ServUO.exe ]; then
+if [ ! -f /opt/ServUO/Saves/Accounts/accounts.xml ]; then
     rm -r /opt/ServUO/Saves/Accounts/accounts.xml;
     mkdir -p /opt/ServUO/Saves/Accounts;
     chmod 777 /opt/ServUO/Saves/Accounts/;
