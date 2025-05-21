@@ -9,13 +9,16 @@ echo ""
 chmod 777 /opt/scripts/mm.pl;
 
 dos2unix /opt/files/config/*;
+if [ ! -f /opt/ServUO/ServUO.exe ]; then
+    rm -r /opt/ServUO/Saves/Accounts/accounts.xml;
+    mkdir -p /opt/ServUO/Saves/Accounts;
+    chmod 777 /opt/ServUO/Saves/Accounts/;
 
-rm -r /opt/ServUO/Saves/Accounts/accounts.xml;
-mkdir -p /opt/ServUO/Saves/Accounts;
-chmod 777 /opt/ServUO/Saves/Accounts/;
-
-/opt/scripts/mm.pl /opt/files/config/;
-
+    /opt/scripts/mm.pl /opt/files/config/;
+else 
+   echo "================================================================================"
+   echo "Accounts.xml exists, skipping template conversion."
+fi
 
 lastexec=$?;
 __exit $lastexec;
