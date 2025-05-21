@@ -1,7 +1,7 @@
 version: '3'
 services:
   servuo:
-   image: aplayerv1/servuo:0.0.20-amd64
+   image: aplayerv1/servuo:latest-amd64
    restart: always
    network_mode: host
    environment:

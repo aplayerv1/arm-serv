@@ -62,10 +62,15 @@ echo "";
 
 pass="$(echo 'admin' | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev | tr '[:lower:]' '[:upper:]')";
 
-export _ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(echo '$pass')}";
+export _ADMIN_PASSWORD="${ADMIN_PASSWORD:-$pass}"
+
+# Optional: trim trailing slash if needed
 if [[ "${_ADMIN_PASSWORD}" =~ ^(.*)/$ ]]; then
-    export _ADMIN_PASSWORD = "$(echo ${BASH_REMATCH[1]} | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev)";
+    export _ADMIN_PASSWORD="${BASH_REMATCH[1]}"
 fi
-echo "PASSWORD set to ${_ADMIN_PASSWORD}";
-echo -n "$(echo ${_ADMIN_PASSWORD} | sha1sum | sed 's/.\{2\}/&-/g' | rev | cut -c 6- | rev | tr '[:lower:]' '[:upper:]')" > "${_CONTAINER_EV}/_ADMIN_PASSWORD";
-echo "";
+
+echo "PASSWORD set to ${_ADMIN_PASSWORD}"
+
+# Save as-is (plaintext) to file
+echo -n "${_ADMIN_PASSWORD}" > "${_CONTAINER_EV}/_ADMIN_PASSWORD"
+echo ""

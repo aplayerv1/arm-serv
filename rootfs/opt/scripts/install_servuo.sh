@@ -22,6 +22,14 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     echo "Copying ServUO to /opt..."
     rsync -av /root/ServUO/ /opt/ServUO/
     rm -rf /root/ServUO
+    echo "================================================================================"
+    echo "Building Other scripts..."
+    echo "================================================================================"
+    cd /opt/ServUO/
+    cp /opt/scripts/GeneratePasswordHash.cs /opt/ServUO/
+    mcs -r:ServUO.exe GeneratePasswordHash.cs
+    ADMIN_PASSWORD_HASH=$(mono GeneratePasswordHash.exe "$ADMIN_PASSWORD")
+    sed -i "s|<newCryptPassword>.*</newCryptPassword>|<newCryptPassword>${ADMIN_PASSWORD_HASH}</newCryptPassword>|" /opt/ServUO/Saves/Accounts/accounts.xml
 
     echo "================================================================================"
     echo "Copying custom TelnetConsole scripts"
@@ -30,17 +38,23 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     cp /opt/scripts/TelnetConsole/*.cs /opt/ServUO/Scripts/Custom/TelnetConsole/
 
     echo "================================================================================"
-    echo "Building ServUO scripts..."
+    echo "Building Microsoft stuff scripts..."
     echo "================================================================================"
-    cd /opt/ServUO
 
+    cd /tmp
     wget https://packages.microsoft.com/config/debian/11/packages-microsoft-prod.deb
     dpkg -i packages-microsoft-prod.deb
     apt update
     apt install -y dotnet-sdk-7.0
 
+    echo "================================================================================"
+    echo "Building ServUO scripts..."
+    echo "================================================================================"
+
+    cd /opt/ServUO
+
     dotnet build
-    
+
     chmod -R 777 /opt/ServUO/
 else
     echo "ServUO already built — skipping clone and build steps."
