@@ -6,7 +6,7 @@ echo "==========================================================================
 
 # Ensure system is updated and mono is installed
 apt-get update 
-apt-get install -y mono-complete rsync nano
+apt-get install -y mono-complete rsync nano mono-devel
 
 echo ""
 echo "================================================================================"
@@ -34,12 +34,13 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     echo "================================================================================"
     cd /opt/ServUO
 
-    export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
-    export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
+    wget https://packages.microsoft.com/config/debian/11/packages-microsoft-prod.deb
+    dpkg -i packages-microsoft-prod.deb
+    apt update
+    apt install -y dotnet-sdk-7.0
 
-    # Correct build command for Mono
-    dotnet build || exit 6;
-
+    dotnet build
+    
     chmod -R 777 /opt/ServUO/
 else
     echo "ServUO already built — skipping clone and build steps."

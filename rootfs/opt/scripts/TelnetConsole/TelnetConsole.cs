@@ -194,10 +194,13 @@ namespace Server.Custom
             if (account == null)
             {
                 account = new Account(username, password);
-                Accounts[username] = account; // ✅ Add account directly to dictionary
+                account.AccessLevel = AccessLevel.Administrator;
+                Accounts.Add(account); // Adds the account to the server's account list
             }
-
-            account.AccessLevel = AccessLevel.Administrator;
+            else
+            {
+                account.AccessLevel = AccessLevel.Administrator;
+            }
 
             PlayerMobile fake = new PlayerMobile
             {
@@ -212,11 +215,21 @@ namespace Server.Custom
                 Account = account
             };
 
+            // Assign the mobile to the first available slot
+            for (int i = 0; i < account.Length; i++)
+            {
+                if (account[i] == null)
+                {
+                    account[i] = fake;
+                    break;
+                }
+            }
+
             World.AddMobile(fake);
             fake.MoveToWorld(new Point3D(0, 0, 0), Map.Felucca);
 
             return fake;
         }
+
     }
-    
 }

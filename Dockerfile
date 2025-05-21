@@ -1,4 +1,4 @@
-FROM debian:bullseye
+FROM mono:latest
 ARG DEBIAN_FRONTEND="noninteractive"
 ARG S6_VERSION="v3.1.3.0"
 ARG S6_ARCH="amd64"
