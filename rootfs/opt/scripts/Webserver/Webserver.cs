@@ -1,82 +1,357 @@
 using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
+using System.Net.WebSockets;
 using System.Text;
-using System.Timers;
+using System.Threading;
+using System.Threading.Tasks;
 using Server;
 using Server.Mobiles;
+using Server.Items;
 
-namespace Server.Custom.Webserver
+
+namespace Server.Custom
 {
     public static class Webserver
     {
-        private static readonly HttpListener Listener = new HttpListener();
-        private static Timer updateTimer;
+        private static HttpListener _listener;
+        private static List<WebSocket> _sockets = new List<WebSocket>();
+        private static CancellationTokenSource _cts;
 
         public static void Initialize()
         {
-            Listener.Prefixes.Add("http://*:8822/");
-            Listener.Start();
-            Listener.BeginGetContext(OnRequest, Listener);
+            _cts = new CancellationTokenSource();
+            _listener = new HttpListener();
+            _listener.Prefixes.Add("http://+:8822/");
+            _listener.Start();
 
-            updateTimer = new Timer(5000); // 5 seconds in milliseconds
-            updateTimer.Elapsed += OnTimedEvent;
-            updateTimer.AutoReset = true;
-            updateTimer.Start();
+            Console.WriteLine("[Webserver] Started on port 8822");
 
-            Console.WriteLine("[Webserver] Listening on port 8080.");
+            Task.Run(() => ListenLoop());
+            Task.Run(() => BroadcastPlayerPositionsLoop(_cts.Token));
         }
 
-        private static void OnTimedEvent(object sender, ElapsedEventArgs e)
+        public static void Dispose()
         {
-            // You could update cached values or other logic here
+            _cts.Cancel();
+            _listener.Stop();
+            lock (_sockets)
+            {
+                foreach (var ws in _sockets)
+                    ws.Dispose();
+                _sockets.Clear();
+            }
         }
 
-        private static void OnRequest(IAsyncResult result)
+        private static async Task ListenLoop()
         {
+            while (_listener.IsListening)
+            {
+                try
+                {
+                    var ctx = await _listener.GetContextAsync();
+
+                    if (ctx.Request.IsWebSocketRequest && ctx.Request.RawUrl == "/players")
+                    {
+                        var wsContext = await ctx.AcceptWebSocketAsync(null);
+                        var ws = wsContext.WebSocket;
+                        lock (_sockets) { _sockets.Add(ws); }
+                        Console.WriteLine("[Webserver] WebSocket client connected.");
+
+                        _ = HandleWebSocket(ws);
+                    }
+                    else if (ctx.Request.RawUrl.StartsWith("/map"))
+                    {
+                        // Parse query params: x, y, width, height
+                        var qs = ctx.Request.QueryString;
+                        if (int.TryParse(qs["x"], out int x) &&
+                            int.TryParse(qs["y"], out int y) &&
+                            int.TryParse(qs["width"], out int width) &&
+                            int.TryParse(qs["height"], out int height))
+                        {
+                            var bmp = RenderMap(x, y, width, height);
+                            ctx.Response.ContentType = "image/png";
+                            using (var ms = new MemoryStream())
+                            {
+                                bmp.Save(ms, ImageFormat.Png);
+                                ms.Position = 0;
+                                await ms.CopyToAsync(ctx.Response.OutputStream);
+                            }
+                            bmp.Dispose();
+                            ctx.Response.Close();
+                        }
+                        else
+                        {
+                            ctx.Response.StatusCode = 400;
+                            await using var writer = new StreamWriter(ctx.Response.OutputStream);
+                            await writer.WriteAsync("Bad Request: missing or invalid parameters");
+                            ctx.Response.Close();
+                        }
+                    }
+                    else
+                    {
+                        // Serve basic client HTML for the map viewer
+                        if (ctx.Request.RawUrl == "/" || ctx.Request.RawUrl == "/index.html")
+                        {
+                            ctx.Response.ContentType = "text/html";
+                            using var writer = new StreamWriter(ctx.Response.OutputStream);
+                            await writer.WriteAsync(GetHtmlPage());
+                            ctx.Response.Close();
+                        }
+                        else
+                        {
+                            ctx.Response.StatusCode = 404;
+                            ctx.Response.Close();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[Webserver] Exception: " + ex.Message);
+                }
+            }
+        }
+
+        private static async Task HandleWebSocket(WebSocket ws)
+        {
+            var buffer = new byte[1024];
             try
             {
-                var context = Listener.EndGetContext(result);
-                Listener.BeginGetContext(OnRequest, Listener);
+                while (ws.State == WebSocketState.Open)
+                {
+                    var result = await ws.ReceiveAsync(buffer, CancellationToken.None);
 
-                var responseText = GeneratePlayerMapHtml();
-
-                var buffer = Encoding.UTF8.GetBytes(responseText);
-                context.Response.ContentLength64 = buffer.Length;
-                context.Response.ContentType = "text/html";
-                context.Response.OutputStream.Write(buffer, 0, buffer.Length);
-                context.Response.OutputStream.Close();
+                    if (result.MessageType == WebSocketMessageType.Close || result.Count == 0)
+                        break;
+                }
             }
-            catch (Exception ex)
+            catch { /* ignore */ }
+            finally
             {
-                Console.WriteLine("[Webserver] Error: " + ex.Message);
+                lock (_sockets) { _sockets.Remove(ws); }
+                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                Console.WriteLine("[Webserver] WebSocket client disconnected.");
             }
         }
 
-        private static string GeneratePlayerMapHtml()
+        private class PlayerData
         {
-            var sb = new StringBuilder();
+            public int Serial { get; set; }
+            public string Name { get; set; }
+            public int X { get; set; }
+            public int Y { get; set; }
+            public int Z { get; set; }
+            public string Map { get; set; }
+        }
 
-            sb.AppendLine("<!DOCTYPE html>");
-            sb.AppendLine("<html><head><title>UO Live Map</title></head><body>");
-            sb.AppendLine("<h1>Live Player Coordinates</h1>");
-            sb.AppendLine("<ul>");
-
-            foreach (NetState state in NetState.Instances)
+        private static async Task BroadcastPlayerPositionsLoop(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
             {
-                if (state != null && state.Mobile != null && !state.Mobile.Deleted)
+                var players = new List<PlayerData>();
+
+                foreach (var mobile in World.Mobiles.Values)
                 {
-                    var mob = state.Mobile;
-                    sb.AppendFormat("<li>{0} - X: {1}, Y: {2}, Map: {3}</li>", mob.Name, mob.X, mob.Y, mob.Map);
+                    if (mobile is PlayerMobile player && player.Map != null)
+                    {
+                        players.Add(new PlayerData
+                        {
+                            Serial = player.Serial.Value,
+                            Name = player.Name,
+                            X = player.Location.X,
+                            Y = player.Location.Y,
+                            Z = player.Location.Z,
+                            Map = player.Map.ToString()
+                        });
+                    }
+                }
+
+                var json = System.Text.Json.JsonSerializer.Serialize(players);
+                var buffer = Encoding.UTF8.GetBytes(json);
+
+                lock (_sockets)
+                {
+                    _sockets.RemoveAll(ws => ws.State != WebSocketState.Open);
+                    foreach (var ws in _sockets)
+                    {
+                        try
+                        {
+                            ws.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None).Wait();
+                        }
+                        catch { /* ignore individual send errors */ }
+                    }
+                }
+
+                await Task.Delay(2000, token);
+            }
+        }
+
+        // Map tile rendering parameters
+        private const int TilePixelSize = 24; // Size of each tile in pixels
+
+        // Dynamically render map portion to bitmap
+        private static Bitmap RenderMap(int startX, int startY, int width, int height)
+        {
+            Bitmap bmp = new Bitmap(width * TilePixelSize, height * TilePixelSize);
+            using Graphics g = Graphics.FromImage(bmp);
+            g.Clear(Color.Black);
+
+            // Draw map tiles and statics
+            Map map = Map.Felucca; // Hardcoded for demo, can be param or dynamic
+
+            for (int dx = 0; dx < width; dx++)
+            {
+                for (int dy = 0; dy < height; dy++)
+                {
+                    int mapX = startX + dx;
+                    int mapY = startY + dy;
+
+                    DrawTile(g, map, mapX, mapY, dx * TilePixelSize, dy * TilePixelSize);
                 }
             }
 
-            sb.AppendLine("</ul>");
-            sb.AppendLine("<p>Last updated: " + DateTime.UtcNow.ToString("u") + "</p>");
-            sb.AppendLine("<meta http-equiv='refresh' content='5'>");
-            sb.AppendLine("</body></html>");
+            // Overlay players as red rectangles
+            foreach (var mobile in World.Mobiles.Values)
+            {
+                if (mobile is PlayerMobile player && player.Map == map)
+                {
+                    int px = player.Location.X - startX;
+                    int py = player.Location.Y - startY;
 
-            return sb.ToString();
+                    if (px >= 0 && px < width && py >= 0 && py < height)
+                    {
+                        Rectangle playerRect = new Rectangle(px * TilePixelSize, py * TilePixelSize, TilePixelSize, TilePixelSize);
+                        using Brush brush = new SolidBrush(Color.FromArgb(180, Color.Red));
+                        g.FillEllipse(brush, playerRect);
+                    }
+                }
+            }
+
+            return bmp;
+        }
+
+        private static void DrawTile(Graphics g, Map map, int x, int y, int screenX, int screenY)
+        {
+            // Draw land tile
+            var landTile = map.Tiles.GetLandTile(x, y);
+            Color landColor = GetLandTileColor(landTile.ID);
+            using Brush brush = new SolidBrush(landColor);
+            g.FillRectangle(brush, screenX, screenY, TilePixelSize, TilePixelSize);
+
+            // Draw statics on top (like trees)
+            var statics = map.Tiles.GetStaticTiles(x, y);
+            foreach (var stat in statics)
+            {
+                Color staticColor = GetStaticTileColor(stat.ID);
+                using Brush staticBrush = new SolidBrush(staticColor);
+                // Draw smaller rectangle in center
+                int size = TilePixelSize / 2;
+                g.FillEllipse(staticBrush, screenX + TilePixelSize/4, screenY + TilePixelSize/4, size, size);
+            }
+        }
+
+        // Simplified mapping: map land tile IDs to color
+        private static Color GetLandTileColor(int tileID)
+        {
+            // Very simple palette mapping for demo purposes
+            return tileID switch
+            {
+                >= 0x00 and <= 0x3E => Color.Green,   // Grass
+                >= 0x3F and <= 0x6F => Color.SandyBrown, // Dirt/sand
+                >= 0x70 and <= 0x9F => Color.Gray,   // Rock
+                _ => Color.DarkGreen,
+            };
+        }
+
+        private static Color GetStaticTileColor(int tileID)
+        {
+            // Simple statics palette for demo (trees, bushes)
+            if ((tileID >= 0x0E00 && tileID <= 0x0EFF) || (tileID >= 0x25A && tileID <= 0x280))
+                return Color.DarkGreen;
+
+            return Color.Brown;
+        }
+
+        private static string GetHtmlPage()
+        {
+            return @"
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8' />
+<meta name='viewport' content='width=device-width, initial-scale=1' />
+<title>ServUO Dynamic Map</title>
+<style>
+  #mapContainer {
+    position: relative;
+    width: 480px;
+    height: 360px;
+    border: 1px solid black;
+  }
+  #mapImg {
+    image-rendering: pixelated;
+    width: 480px;
+    height: 360px;
+  }
+  .player-marker {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: rgba(255,0,0,0.7);
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+  }
+</style>
+</head>
+<body>
+<h1>ServUO Dynamic Map (Port 8822)</h1>
+<div id='mapContainer'>
+  <img id='mapImg' src='/map?x=100&y=100&width=20&height=15' />
+</div>
+
+<script>
+  const mapContainer = document.getElementById('mapContainer');
+  const mapImg = document.getElementById('mapImg');
+
+  // Tile size from server
+  const tilePixelSize = 24;
+
+  // Viewport coords (must match server default)
+  let viewport = { x: 100, y: 100, width: 20, height: 15 };
+
+  // WebSocket for player updates
+  const ws = new WebSocket('ws://' + location.host + '/players');
+  ws.onmessage = function(event) {
+    const players = JSON.parse(event.data);
+    // Clear old markers
+    document.querySelectorAll('.player-marker').forEach(e => e.remove());
+
+    players.forEach(p => {
+      // Only show players in this map and viewport
+      if (p.Map === 'Felucca' &&
+          p.X >= viewport.x && p.X < viewport.x + viewport.width &&
+          p.Y >= viewport.y && p.Y < viewport.y + viewport.height) {
+
+        const px = (p.X - viewport.x) * tilePixelSize;
+        const py = (p.Y - viewport.y) * tilePixelSize;
+
+        const marker = document.createElement('div');
+        marker.className = 'player-marker';
+        marker.style.left = px + 'px';
+        marker.style.top = py + 'px';
+        marker.title = p.Name;
+        mapContainer.appendChild(marker);
+      }
+    });
+  };
+</script>
+</body>
+</html>
+";
         }
     }
 }

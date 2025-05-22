@@ -1,357 +1,235 @@
 using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
-using System.Net.WebSockets;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
+using System.Linq;
 using Server;
+using Server.Commands;
 using Server.Mobiles;
-using Server.Items;
-using Server.Maps;
+using Server.Accounting;
+using Server.Misc;
+
 
 namespace Server.Custom
 {
-    public static class Webserver
+    public class TelnetConsole
     {
-        private static HttpListener _listener;
-        private static List<WebSocket> _sockets = new List<WebSocket>();
-        private static CancellationTokenSource _cts;
+        private static TcpListener _listener;
+        private static Thread _listenerThread;
+        private static int _port = 6003;
+        private static int _maxPort = 6010;
+
+        // Configuration
+        private static readonly string[] AllowedIPs = { "127.0.0.1", "10.10.1.230" }; // Add IPs here
+        private static readonly bool PersistFakeAdmin = false;
+        private static readonly string LogPath = "Logs/TelnetCommands.log";
 
         public static void Initialize()
         {
-            _cts = new CancellationTokenSource();
-            _listener = new HttpListener();
-            _listener.Prefixes.Add("http://+:8822/");
-            _listener.Start();
-
-            Console.WriteLine("[Webserver] Started on port 8822");
-
-            Task.Run(() => ListenLoop());
-            Task.Run(() => BroadcastPlayerPositionsLoop(_cts.Token));
-        }
-
-        public static void Dispose()
-        {
-            _cts.Cancel();
-            _listener.Stop();
-            lock (_sockets)
+            if (_listener != null)
             {
-                foreach (var ws in _sockets)
-                    ws.Dispose();
-                _sockets.Clear();
+                Console.WriteLine("[TelnetConsole] Already initialized.");
+                return;
             }
-        }
 
-        private static async Task ListenLoop()
-        {
-            while (_listener.IsListening)
+            bool started = false;
+            while (_port <= _maxPort)
             {
                 try
                 {
-                    var ctx = await _listener.GetContextAsync();
-
-                    if (ctx.Request.IsWebSocketRequest && ctx.Request.RawUrl == "/players")
+                    _listener = new TcpListener(IPAddress.Any, _port);
+                    _listener.Start();
+                    started = true;
+                    break;
+                }
+                catch (SocketException ex)
+                {
+                    if (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
                     {
-                        var wsContext = await ctx.AcceptWebSocketAsync(null);
-                        var ws = wsContext.WebSocket;
-                        lock (_sockets) { _sockets.Add(ws); }
-                        Console.WriteLine("[Webserver] WebSocket client connected.");
-
-                        _ = HandleWebSocket(ws);
-                    }
-                    else if (ctx.Request.RawUrl.StartsWith("/map"))
-                    {
-                        // Parse query params: x, y, width, height
-                        var qs = ctx.Request.QueryString;
-                        if (int.TryParse(qs["x"], out int x) &&
-                            int.TryParse(qs["y"], out int y) &&
-                            int.TryParse(qs["width"], out int width) &&
-                            int.TryParse(qs["height"], out int height))
-                        {
-                            var bmp = RenderMap(x, y, width, height);
-                            ctx.Response.ContentType = "image/png";
-                            using (var ms = new MemoryStream())
-                            {
-                                bmp.Save(ms, ImageFormat.Png);
-                                ms.Position = 0;
-                                await ms.CopyToAsync(ctx.Response.OutputStream);
-                            }
-                            bmp.Dispose();
-                            ctx.Response.Close();
-                        }
-                        else
-                        {
-                            ctx.Response.StatusCode = 400;
-                            await using var writer = new StreamWriter(ctx.Response.OutputStream);
-                            await writer.WriteAsync("Bad Request: missing or invalid parameters");
-                            ctx.Response.Close();
-                        }
+                        Console.WriteLine("[TelnetConsole] Port {0} in use. Trying next...", _port);
+                        _port++;
                     }
                     else
                     {
-                        // Serve basic client HTML for the map viewer
-                        if (ctx.Request.RawUrl == "/" || ctx.Request.RawUrl == "/index.html")
-                        {
-                            ctx.Response.ContentType = "text/html";
-                            using var writer = new StreamWriter(ctx.Response.OutputStream);
-                            await writer.WriteAsync(GetHtmlPage());
-                            ctx.Response.Close();
-                        }
-                        else
-                        {
-                            ctx.Response.StatusCode = 404;
-                            ctx.Response.Close();
-                        }
+                        Console.WriteLine("[TelnetConsole] Failed to start on port {0}: {1}", _port, ex.Message);
+                        return;
                     }
+                }
+            }
+
+            if (!started)
+            {
+                Console.WriteLine("[TelnetConsole] ERROR: No available ports between 6003–6010.");
+                return;
+            }
+
+            _listenerThread = new Thread(ListenForClients);
+            _listenerThread.IsBackground = true;
+            _listenerThread.Start();
+
+            Console.WriteLine("[TelnetConsole] Listening on port {0}", _port);
+        }
+
+        private static void ListenForClients()
+        {
+            while (true)
+            {
+                try
+                {
+                    TcpClient client = _listener.AcceptTcpClient();
+                    var endpoint = client.Client.RemoteEndPoint as IPEndPoint;
+
+                    if (endpoint == null || !AllowedIPs.Contains(endpoint.Address.ToString()))
+                    {
+                        Console.WriteLine("[TelnetConsole] Rejected connection from " + endpoint?.Address);
+                        client.Close();
+                        continue;
+                    }
+
+                    Thread clientThread = new Thread(() => HandleClient(client));
+                    clientThread.IsBackground = true;
+                    clientThread.Start();
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("[Webserver] Exception: " + ex.Message);
+                    Console.WriteLine("[TelnetConsole] Listener error: " + ex.Message);
                 }
             }
         }
 
-        private static async Task HandleWebSocket(WebSocket ws)
+        private static void HandleClient(TcpClient client)
         {
-            var buffer = new byte[1024];
+            NetworkStream stream = null;
+            StreamReader reader = null;
+            StreamWriter writer = null;
+
             try
             {
-                while (ws.State == WebSocketState.Open)
-                {
-                    var result = await ws.ReceiveAsync(buffer, CancellationToken.None);
+                stream = client.GetStream();
+                reader = new StreamReader(stream, Encoding.ASCII);
+                writer = new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true };
 
-                    if (result.MessageType == WebSocketMessageType.Close || result.Count == 0)
-                        break;
+                writer.Write("Username: ");
+                string username = reader.ReadLine();
+                writer.Write("Password: ");
+                string password = reader.ReadLine();
+
+                if (username != "admin" || password != "changeme")
+                {
+                    writer.WriteLine("Access denied.");
+                    return;
                 }
-            }
-            catch { /* ignore */ }
-            finally
-            {
-                lock (_sockets) { _sockets.Remove(ws); }
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-                Console.WriteLine("[Webserver] WebSocket client disconnected.");
-            }
-        }
 
-        private class PlayerData
-        {
-            public int Serial { get; set; }
-            public string Name { get; set; }
-            public int X { get; set; }
-            public int Y { get; set; }
-            public int Z { get; set; }
-            public string Map { get; set; }
-        }
+                writer.WriteLine("Welcome to ServUO Telnet Console! Type 'exit' to disconnect.");
 
-        private static async Task BroadcastPlayerPositionsLoop(CancellationToken token)
-        {
-            while (!token.IsCancellationRequested)
-            {
-                var players = new List<PlayerData>();
-
-                foreach (var mobile in World.Mobiles.Values)
+                string line;
+                while ((line = reader.ReadLine()) != null)
                 {
-                    if (mobile is PlayerMobile player && player.Map != null)
+                    if (line.Trim().ToLower() == "exit")
                     {
-                        players.Add(new PlayerData
-                        {
-                            Serial = player.Serial.Value,
-                            Name = player.Name,
-                            X = player.Location.X,
-                            Y = player.Location.Y,
-                            Z = player.Location.Z,
-                            Map = player.Map.ToString()
-                        });
+                        writer.WriteLine("Goodbye!");
+                        break;
                     }
-                }
 
-                var json = System.Text.Json.JsonSerializer.Serialize(players);
-                var buffer = Encoding.UTF8.GetBytes(json);
+                    string commandText = line;
+                    string logEntry = $"[{DateTime.Now}] {username}: {commandText}";
+                    File.AppendAllText(LogPath, logEntry + Environment.NewLine);
 
-                lock (_sockets)
-                {
-                    _sockets.RemoveAll(ws => ws.State != WebSocketState.Open);
-                    foreach (var ws in _sockets)
+                    Timer.DelayCall(TimeSpan.Zero, () =>
                     {
                         try
                         {
-                            ws.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None).Wait();
+                            Mobile admin = World.Mobiles.Values.FirstOrDefault(m => m.AccessLevel >= AccessLevel.Administrator);
+                            bool createdFake = false;
+
+                            if (admin == null)
+                            {
+                                admin = CreateFakeAdmin();
+                                createdFake = true;
+                            }
+
+                            CommandSystem.Handle(admin, CommandSystem.Prefix + commandText);
+                            Console.WriteLine("[TelnetConsole] Executed command: " + commandText);
+
+                            if (createdFake && !PersistFakeAdmin)
+                            {
+                                Timer.DelayCall(TimeSpan.FromSeconds(5), () =>
+                                {
+                                    if (admin != null && !admin.Deleted)
+                                        admin.Delete();
+                                });
+                            }
                         }
-                        catch { /* ignore individual send errors */ }
-                    }
-                }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("[TelnetConsole] Command error: " + ex.Message);
+                        }
+                    });
 
-                await Task.Delay(2000, token);
+                    writer.WriteLine("Command sent: " + commandText);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[TelnetConsole] Client error: " + ex.Message);
+            }
+            finally
+            {
+                writer?.Dispose();
+                reader?.Dispose();
+                stream?.Dispose();
+                client.Close();
             }
         }
 
-        // Map tile rendering parameters
-        private const int TilePixelSize = 24; // Size of each tile in pixels
-
-        // Dynamically render map portion to bitmap
-        private static Bitmap RenderMap(int startX, int startY, int width, int height)
+        private static Mobile CreateFakeAdmin()
         {
-            Bitmap bmp = new Bitmap(width * TilePixelSize, height * TilePixelSize);
-            using Graphics g = Graphics.FromImage(bmp);
-            g.Clear(Color.Black);
+            string username = "FakeAdmin";
+            string password = "changeme";
 
-            // Draw map tiles and statics
-            Map map = Map.Felucca; // Hardcoded for demo, can be param or dynamic
+            Account account = Accounts.GetAccount(username) as Account;
 
-            for (int dx = 0; dx < width; dx++)
+            if (account == null)
             {
-                for (int dy = 0; dy < height; dy++)
-                {
-                    int mapX = startX + dx;
-                    int mapY = startY + dy;
-
-                    DrawTile(g, map, mapX, mapY, dx * TilePixelSize, dy * TilePixelSize);
-                }
+                account = new Account(username, password);
+                account.AccessLevel = AccessLevel.Administrator;
+                Accounts.Add(account); // Adds the account to the server's account list
+            }
+            else
+            {
+                account.AccessLevel = AccessLevel.Administrator;
             }
 
-            // Overlay players as red rectangles
-            foreach (var mobile in World.Mobiles.Values)
+            PlayerMobile fake = new PlayerMobile
             {
-                if (mobile is PlayerMobile player && player.Map == map)
-                {
-                    int px = player.Location.X - startX;
-                    int py = player.Location.Y - startY;
-
-                    if (px >= 0 && px < width && py >= 0 && py < height)
-                    {
-                        Rectangle playerRect = new Rectangle(px * TilePixelSize, py * TilePixelSize, TilePixelSize, TilePixelSize);
-                        using Brush brush = new SolidBrush(Color.FromArgb(180, Color.Red));
-                        g.FillEllipse(brush, playerRect);
-                    }
-                }
-            }
-
-            return bmp;
-        }
-
-        private static void DrawTile(Graphics g, Map map, int x, int y, int screenX, int screenY)
-        {
-            // Draw land tile
-            var landTile = map.Tiles.GetLandTile(x, y);
-            Color landColor = GetLandTileColor(landTile.ID);
-            using Brush brush = new SolidBrush(landColor);
-            g.FillRectangle(brush, screenX, screenY, TilePixelSize, TilePixelSize);
-
-            // Draw statics on top (like trees)
-            var statics = map.Tiles.GetStaticTiles(x, y);
-            foreach (var stat in statics)
-            {
-                Color staticColor = GetStaticTileColor(stat.ID);
-                using Brush staticBrush = new SolidBrush(staticColor);
-                // Draw smaller rectangle in center
-                int size = TilePixelSize / 2;
-                g.FillEllipse(staticBrush, screenX + TilePixelSize/4, screenY + TilePixelSize/4, size, size);
-            }
-        }
-
-        // Simplified mapping: map land tile IDs to color
-        private static Color GetLandTileColor(int tileID)
-        {
-            // Very simple palette mapping for demo purposes
-            return tileID switch
-            {
-                >= 0x00 and <= 0x3E => Color.Green,   // Grass
-                >= 0x3F and <= 0x6F => Color.SandyBrown, // Dirt/sand
-                >= 0x70 and <= 0x9F => Color.Gray,   // Rock
-                _ => Color.DarkGreen,
+                Name = "FakeAdmin",
+                AccessLevel = AccessLevel.Administrator,
+                Hidden = true,
+                Body = 400,
+                Hue = 0,
+                Female = false,
+                Blessed = true,
+                CantWalk = true,
+                Account = account
             };
+
+            // Assign the mobile to the first available slot
+            for (int i = 0; i < account.Length; i++)
+            {
+                if (account[i] == null)
+                {
+                    account[i] = fake;
+                    break;
+                }
+            }
+
+            World.AddMobile(fake);
+            fake.MoveToWorld(new Point3D(0, 0, 0), Map.Felucca);
+
+            return fake;
         }
 
-        private static Color GetStaticTileColor(int tileID)
-        {
-            // Simple statics palette for demo (trees, bushes)
-            if ((tileID >= 0x0E00 && tileID <= 0x0EFF) || (tileID >= 0x25A && tileID <= 0x280))
-                return Color.DarkGreen;
-
-            return Color.Brown;
-        }
-
-        private static string GetHtmlPage()
-        {
-            return @"
-<!DOCTYPE html>
-<html lang='en'>
-<head>
-<meta charset='UTF-8' />
-<meta name='viewport' content='width=device-width, initial-scale=1' />
-<title>ServUO Dynamic Map</title>
-<style>
-  #mapContainer {
-    position: relative;
-    width: 480px;
-    height: 360px;
-    border: 1px solid black;
-  }
-  #mapImg {
-    image-rendering: pixelated;
-    width: 480px;
-    height: 360px;
-  }
-  .player-marker {
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    background: rgba(255,0,0,0.7);
-    border-radius: 50%;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
-  }
-</style>
-</head>
-<body>
-<h1>ServUO Dynamic Map (Port 8822)</h1>
-<div id='mapContainer'>
-  <img id='mapImg' src='/map?x=100&y=100&width=20&height=15' />
-</div>
-
-<script>
-  const mapContainer = document.getElementById('mapContainer');
-  const mapImg = document.getElementById('mapImg');
-
-  // Tile size from server
-  const tilePixelSize = 24;
-
-  // Viewport coords (must match server default)
-  let viewport = { x: 100, y: 100, width: 20, height: 15 };
-
-  // WebSocket for player updates
-  const ws = new WebSocket('ws://' + location.host + '/players');
-  ws.onmessage = function(event) {
-    const players = JSON.parse(event.data);
-    // Clear old markers
-    document.querySelectorAll('.player-marker').forEach(e => e.remove());
-
-    players.forEach(p => {
-      // Only show players in this map and viewport
-      if (p.Map === 'Felucca' &&
-          p.X >= viewport.x && p.X < viewport.x + viewport.width &&
-          p.Y >= viewport.y && p.Y < viewport.y + viewport.height) {
-
-        const px = (p.X - viewport.x) * tilePixelSize;
-        const py = (p.Y - viewport.y) * tilePixelSize;
-
-        const marker = document.createElement('div');
-        marker.className = 'player-marker';
-        marker.style.left = px + 'px';
-        marker.style.top = py + 'px';
-        marker.title = p.Name;
-        mapContainer.appendChild(marker);
-      }
-    });
-  };
-</script>
-</body>
-</html>
-";
-        }
     }
 }
