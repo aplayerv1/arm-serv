@@ -8,10 +8,10 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json; // Use Newtonsoft.Json for JSON serialization
 using Server;
 using Server.Mobiles;
 using Server.Items;
-
 
 namespace Server.Custom
 {
@@ -67,27 +67,39 @@ namespace Server.Custom
                     {
                         // Parse query params: x, y, width, height
                         var qs = ctx.Request.QueryString;
-                        if (int.TryParse(qs["x"], out int x) &&
-                            int.TryParse(qs["y"], out int y) &&
-                            int.TryParse(qs["width"], out int width) &&
-                            int.TryParse(qs["height"], out int height))
+                        int x, y, width, height;
+                        if (int.TryParse(qs["x"], out x) &&
+                            int.TryParse(qs["y"], out y) &&
+                            int.TryParse(qs["width"], out width) &&
+                            int.TryParse(qs["height"], out height))
                         {
-                            var bmp = RenderMap(x, y, width, height);
-                            ctx.Response.ContentType = "image/png";
-                            using (var ms = new MemoryStream())
+                            Bitmap bmp = null;
+                            try
                             {
-                                bmp.Save(ms, ImageFormat.Png);
-                                ms.Position = 0;
-                                await ms.CopyToAsync(ctx.Response.OutputStream);
+                                bmp = RenderMap(x, y, width, height);
+                                ctx.Response.ContentType = "image/png";
+
+                                using (var ms = new MemoryStream())
+                                {
+                                    bmp.Save(ms, ImageFormat.Png);
+                                    ms.Position = 0;
+                                    await ms.CopyToAsync(ctx.Response.OutputStream);
+                                }
                             }
-                            bmp.Dispose();
+                            finally
+                            {
+                                if (bmp != null)
+                                    bmp.Dispose();
+                            }
                             ctx.Response.Close();
                         }
                         else
                         {
                             ctx.Response.StatusCode = 400;
-                            await using var writer = new StreamWriter(ctx.Response.OutputStream);
-                            await writer.WriteAsync("Bad Request: missing or invalid parameters");
+                            using (var writer = new StreamWriter(ctx.Response.OutputStream))
+                            {
+                                writer.Write("Bad Request: missing or invalid parameters");
+                            }
                             ctx.Response.Close();
                         }
                     }
@@ -97,8 +109,10 @@ namespace Server.Custom
                         if (ctx.Request.RawUrl == "/" || ctx.Request.RawUrl == "/index.html")
                         {
                             ctx.Response.ContentType = "text/html";
-                            using var writer = new StreamWriter(ctx.Response.OutputStream);
-                            await writer.WriteAsync(GetHtmlPage());
+                            using (var writer = new StreamWriter(ctx.Response.OutputStream))
+                            {
+                                await writer.WriteAsync(GetHtmlPage());
+                            }
                             ctx.Response.Close();
                         }
                         else
@@ -122,7 +136,8 @@ namespace Server.Custom
             {
                 while (ws.State == WebSocketState.Open)
                 {
-                    var result = await ws.ReceiveAsync(buffer, CancellationToken.None);
+                    var segment = new ArraySegment<byte>(buffer);
+                    var result = await ws.ReceiveAsync(segment, CancellationToken.None);
 
                     if (result.MessageType == WebSocketMessageType.Close || result.Count == 0)
                         break;
@@ -132,7 +147,11 @@ namespace Server.Custom
             finally
             {
                 lock (_sockets) { _sockets.Remove(ws); }
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                if (ws.State == WebSocketState.Open || ws.State == WebSocketState.CloseReceived)
+                {
+                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                }
+                ws.Dispose();
                 Console.WriteLine("[Webserver] WebSocket client disconnected.");
             }
         }
@@ -155,7 +174,8 @@ namespace Server.Custom
 
                 foreach (var mobile in World.Mobiles.Values)
                 {
-                    if (mobile is PlayerMobile player && player.Map != null)
+                    var player = mobile as PlayerMobile;
+                    if (player != null && player.Map != null)
                     {
                         players.Add(new PlayerData
                         {
@@ -169,7 +189,7 @@ namespace Server.Custom
                     }
                 }
 
-                var json = System.Text.Json.JsonSerializer.Serialize(players);
+                var json = JsonConvert.SerializeObject(players);
                 var buffer = Encoding.UTF8.GetBytes(json);
 
                 lock (_sockets)
@@ -179,7 +199,8 @@ namespace Server.Custom
                     {
                         try
                         {
-                            ws.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None).Wait();
+                            var segment = new ArraySegment<byte>(buffer);
+                            ws.SendAsync(segment, WebSocketMessageType.Text, true, CancellationToken.None).Wait();
                         }
                         catch { /* ignore individual send errors */ }
                     }
@@ -196,36 +217,41 @@ namespace Server.Custom
         private static Bitmap RenderMap(int startX, int startY, int width, int height)
         {
             Bitmap bmp = new Bitmap(width * TilePixelSize, height * TilePixelSize);
-            using Graphics g = Graphics.FromImage(bmp);
-            g.Clear(Color.Black);
-
-            // Draw map tiles and statics
-            Map map = Map.Felucca; // Hardcoded for demo, can be param or dynamic
-
-            for (int dx = 0; dx < width; dx++)
+            using (Graphics g = Graphics.FromImage(bmp))
             {
-                for (int dy = 0; dy < height; dy++)
+                g.Clear(Color.Black);
+
+                // Draw map tiles and statics
+                Map map = Map.Felucca; // Hardcoded for demo, can be param or dynamic
+
+                for (int dx = 0; dx < width; dx++)
                 {
-                    int mapX = startX + dx;
-                    int mapY = startY + dy;
-
-                    DrawTile(g, map, mapX, mapY, dx * TilePixelSize, dy * TilePixelSize);
-                }
-            }
-
-            // Overlay players as red rectangles
-            foreach (var mobile in World.Mobiles.Values)
-            {
-                if (mobile is PlayerMobile player && player.Map == map)
-                {
-                    int px = player.Location.X - startX;
-                    int py = player.Location.Y - startY;
-
-                    if (px >= 0 && px < width && py >= 0 && py < height)
+                    for (int dy = 0; dy < height; dy++)
                     {
-                        Rectangle playerRect = new Rectangle(px * TilePixelSize, py * TilePixelSize, TilePixelSize, TilePixelSize);
-                        using Brush brush = new SolidBrush(Color.FromArgb(180, Color.Red));
-                        g.FillEllipse(brush, playerRect);
+                        int mapX = startX + dx;
+                        int mapY = startY + dy;
+
+                        DrawTile(g, map, mapX, mapY, dx * TilePixelSize, dy * TilePixelSize);
+                    }
+                }
+
+                // Overlay players as red rectangles
+                foreach (var mobile in World.Mobiles.Values)
+                {
+                    var player = mobile as PlayerMobile;
+                    if (player != null && player.Map == map)
+                    {
+                        int px = player.Location.X - startX;
+                        int py = player.Location.Y - startY;
+
+                        if (px >= 0 && px < width && py >= 0 && py < height)
+                        {
+                            Rectangle playerRect = new Rectangle(px * TilePixelSize, py * TilePixelSize, TilePixelSize, TilePixelSize);
+                            using (Brush brush = new SolidBrush(Color.FromArgb(180, Color.Red)))
+                            {
+                                g.FillEllipse(brush, playerRect);
+                            }
+                        }
                     }
                 }
             }
@@ -238,32 +264,37 @@ namespace Server.Custom
             // Draw land tile
             var landTile = map.Tiles.GetLandTile(x, y);
             Color landColor = GetLandTileColor(landTile.ID);
-            using Brush brush = new SolidBrush(landColor);
-            g.FillRectangle(brush, screenX, screenY, TilePixelSize, TilePixelSize);
+            using (Brush brush = new SolidBrush(landColor))
+            {
+                g.FillRectangle(brush, screenX, screenY, TilePixelSize, TilePixelSize);
+            }
 
             // Draw statics on top (like trees)
             var statics = map.Tiles.GetStaticTiles(x, y);
             foreach (var stat in statics)
             {
                 Color staticColor = GetStaticTileColor(stat.ID);
-                using Brush staticBrush = new SolidBrush(staticColor);
-                // Draw smaller rectangle in center
-                int size = TilePixelSize / 2;
-                g.FillEllipse(staticBrush, screenX + TilePixelSize/4, screenY + TilePixelSize/4, size, size);
+                using (Brush staticBrush = new SolidBrush(staticColor))
+                {
+                    // Draw smaller rectangle in center
+                    int size = TilePixelSize / 2;
+                    g.FillEllipse(staticBrush, screenX + TilePixelSize / 4, screenY + TilePixelSize / 4, size, size);
+                }
             }
         }
 
         // Simplified mapping: map land tile IDs to color
         private static Color GetLandTileColor(int tileID)
         {
-            // Very simple palette mapping for demo purposes
-            return tileID switch
-            {
-                >= 0x00 and <= 0x3E => Color.Green,   // Grass
-                >= 0x3F and <= 0x6F => Color.SandyBrown, // Dirt/sand
-                >= 0x70 and <= 0x9F => Color.Gray,   // Rock
-                _ => Color.DarkGreen,
-            };
+            // Replace C# 8 switch expression with classic if-else
+            if (tileID >= 0x00 && tileID <= 0x3E)
+                return Color.Green;   // Grass
+            else if (tileID >= 0x3F && tileID <= 0x6F)
+                return Color.SandyBrown; // Dirt/sand
+            else if (tileID >= 0x70 && tileID <= 0x9F)
+                return Color.Gray;   // Rock
+            else
+                return Color.DarkGreen;
         }
 
         private static Color GetStaticTileColor(int tileID)
