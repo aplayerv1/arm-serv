@@ -8,10 +8,10 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization; // <-- New serializer
 using Server;
 using Server.Mobiles;
 using Server.Items;
+using Newtonsoft.Json;
 
 namespace Server.Custom
 {
@@ -54,7 +54,10 @@ namespace Server.Custom
                 {
                     var ctx = await _listener.GetContextAsync();
 
-                    if (ctx.Request.IsWebSocketRequest && ctx.Request.RawUrl == "/players")
+                    // Debug log for incoming requests
+                    Console.WriteLine($"[Webserver] Incoming request: {ctx.Request.HttpMethod} {ctx.Request.RawUrl}");
+
+                    if (ctx.Request.IsWebSocketRequest && ctx.Request.Url.AbsolutePath == "/players")
                     {
                         var wsContext = await ctx.AcceptWebSocketAsync(null);
                         var ws = wsContext.WebSocket;
@@ -63,7 +66,7 @@ namespace Server.Custom
 
                         _ = HandleWebSocket(ws);
                     }
-                    else if (ctx.Request.RawUrl.StartsWith("/map"))
+                    else if (ctx.Request.Url.AbsolutePath.StartsWith("/map"))
                     {
                         var qs = ctx.Request.QueryString;
                         int x, y, width, height;
@@ -104,7 +107,7 @@ namespace Server.Custom
                     }
                     else
                     {
-                        if (ctx.Request.RawUrl == "/" || ctx.Request.RawUrl == "/index.html")
+                        if (ctx.Request.Url.AbsolutePath == "/" || ctx.Request.Url.AbsolutePath == "/index.html")
                         {
                             ctx.Response.ContentType = "text/html";
                             using (var writer = new StreamWriter(ctx.Response.OutputStream))
@@ -166,8 +169,6 @@ namespace Server.Custom
 
         private static async Task BroadcastPlayerPositionsLoop(CancellationToken token)
         {
-            var serializer = new JavaScriptSerializer();
-
             while (!token.IsCancellationRequested)
             {
                 var players = new List<PlayerData>();
@@ -189,7 +190,7 @@ namespace Server.Custom
                     }
                 }
 
-                var json = serializer.Serialize(players);
+                var json = JsonConvert.SerializeObject(players);
                 var buffer = Encoding.UTF8.GetBytes(json);
 
                 lock (_sockets)

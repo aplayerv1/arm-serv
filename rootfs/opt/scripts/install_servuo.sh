@@ -40,7 +40,7 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
 
     mkdir -p /opt/ServUO/Scripts/Custom/Webserver
     cp /opt/scripts/Webserver/*.cs /opt/ServUO/Scripts/Custom/Webserver/
-    cp /opt/scripts/Webserver/map.html /opt/ServUO
+    cp /opt/scripts/Webserver/map.html /opt/ServUO/index.html
 
     echo "================================================================================"
     echo "Building Microsoft stuff scripts..."
@@ -58,7 +58,7 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
     export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
     cd /opt/ServUO
-
+    nuget install Newtonsoft.Json
     DOTNET_CLI_HOME=/opt/ServUO dotnet build --self-contained true -p:PublishSingleFile=false
 
     chmod -R 777 /opt/ServUO/

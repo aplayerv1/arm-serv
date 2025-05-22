@@ -1,4 +1,5 @@
-using Server;
+using System;
+using Server.Custom;  // To access both Webserver and TelnetConsole classes
 
 namespace Server.Custom
 {
@@ -8,8 +9,8 @@ namespace Server.Custom
         {
             Console.WriteLine("Initializing Custom Components...");
 
-            Telnet.TelnetConsole.Initialize();
-            Webserver.Webserver.Initialize();
+            TelnetConsole.Initialize();
+            Webserver.Initialize();
 
             Console.WriteLine("Custom Initialization Complete.");
         }
