@@ -3,111 +3,80 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Timers;
-using System.Collections.Generic;
 using Server;
 using Server.Mobiles;
 
-namespace Server.Custom
+namespace Server.Custom.Webserver
 {
-    public class MapWebServer
+    public static class Webserver
     {
-        private static HttpListener _listener;
-        private static string _mapHtml = Path.Combine(Core.BaseDirectory, "map.html");
-        private static string _playerJson = Path.Combine(Core.BaseDirectory, "players.json");
-        private static Timer _playerUpdateTimer;
+        private static readonly HttpListener Listener = new HttpListener();
+        private static Timer updateTimer;
 
         public static void Initialize()
         {
-            EventSink.WorldLoad += OnWorldLoad;
+            Listener.Prefixes.Add("http://*:8822/");
+            Listener.Start();
+            Listener.BeginGetContext(OnRequest, Listener);
+
+            updateTimer = new Timer(5000); // 5 seconds in milliseconds
+            updateTimer.Elapsed += OnTimedEvent;
+            updateTimer.AutoReset = true;
+            updateTimer.Start();
+
+            Console.WriteLine("[Webserver] Listening on port 8080.");
         }
 
-        private static void OnWorldLoad()
+        private static void OnTimedEvent(object sender, ElapsedEventArgs e)
         {
-            try
-            {
-                _listener = new HttpListener();
-                _listener.Prefixes.Add("http://*:8080/");
-                _listener.Start();
-                _listener.BeginGetContext(OnRequest, null);
-                Console.WriteLine("[MapWebServer] Serving http://localhost:8080");
-
-                _playerUpdateTimer = new Timer(1000); // every 1 second
-                _playerUpdateTimer.Elapsed += UpdatePlayerData;
-                _playerUpdateTimer.Start();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[MapWebServer] Error: " + ex);
-            }
-        }
-
-        private static void UpdatePlayerData(object sender, ElapsedEventArgs e)
-        {
-            try
-            {
-                var players = new List<string>();
-
-                foreach (Mobile m in World.Mobiles.Values)
-                {
-                    if (m is PlayerMobile player && !player.Deleted && player.Map != null)
-                    {
-                        string json = $"{{\"name\":\"{player.Name}\",\"x\":{player.X},\"y\":{player.Y}}}";
-                        players.Add(json);
-                    }
-                }
-
-                File.WriteAllText(_playerJson, $"[{string.Join(",", players)}]");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[MapWebServer] Error updating player JSON: " + ex);
-            }
+            // You could update cached values or other logic here
         }
 
         private static void OnRequest(IAsyncResult result)
         {
-            if (_listener == null || !_listener.IsListening)
-                return;
-
-            var context = _listener.EndGetContext(result);
-            _listener.BeginGetContext(OnRequest, null); // next request
-
-            var response = context.Response;
-            string path = context.Request.Url.AbsolutePath.TrimStart('/');
-
             try
             {
-                string filePath = path switch
-                {
-                    "players.json" => _playerJson,
-                    "" or "map.html" => _mapHtml,
-                    _ => null
-                };
+                var context = Listener.EndGetContext(result);
+                Listener.BeginGetContext(OnRequest, Listener);
 
-                if (filePath != null && File.Exists(filePath))
-                {
-                    string contentType = path.EndsWith(".json") ? "application/json" : "text/html";
-                    byte[] buffer = File.ReadAllBytes(filePath);
-                    response.ContentType = contentType;
-                    response.ContentLength64 = buffer.Length;
-                    response.OutputStream.Write(buffer, 0, buffer.Length);
-                }
-                else
-                {
-                    byte[] buffer = Encoding.UTF8.GetBytes("404 Not Found");
-                    response.StatusCode = 404;
-                    response.ContentType = "text/plain";
-                    response.OutputStream.Write(buffer, 0, buffer.Length);
-                }
+                var responseText = GeneratePlayerMapHtml();
+
+                var buffer = Encoding.UTF8.GetBytes(responseText);
+                context.Response.ContentLength64 = buffer.Length;
+                context.Response.ContentType = "text/html";
+                context.Response.OutputStream.Write(buffer, 0, buffer.Length);
+                context.Response.OutputStream.Close();
             }
             catch (Exception ex)
             {
-                Console.WriteLine("[MapWebServer] Error: " + ex);
+                Console.WriteLine("[Webserver] Error: " + ex.Message);
             }
-            finally
+        }
+
+        private static string GeneratePlayerMapHtml()
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine("<!DOCTYPE html>");
+            sb.AppendLine("<html><head><title>UO Live Map</title></head><body>");
+            sb.AppendLine("<h1>Live Player Coordinates</h1>");
+            sb.AppendLine("<ul>");
+
+            foreach (NetState state in NetState.Instances)
             {
-                response.OutputStream.Close();
+                if (state != null && state.Mobile != null && !state.Mobile.Deleted)
+                {
+                    var mob = state.Mobile;
+                    sb.AppendFormat("<li>{0} - X: {1}, Y: {2}, Map: {3}</li>", mob.Name, mob.X, mob.Y, mob.Map);
+                }
             }
+
+            sb.AppendLine("</ul>");
+            sb.AppendLine("<p>Last updated: " + DateTime.UtcNow.ToString("u") + "</p>");
+            sb.AppendLine("<meta http-equiv='refresh' content='5'>");
+            sb.AppendLine("</body></html>");
+
+            return sb.ToString();
         }
     }
 }

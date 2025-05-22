@@ -22,6 +22,11 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     echo "Copying ServUO to /opt..."
     rsync -av /root/ServUO/ /opt/ServUO/
     rm -rf /root/ServUO
+    
+    echo "================================================================================"
+    echo "Copying custom Startup scripts"
+    echo "================================================================================"
+    cp /opt/scripts/Startup/*.cs /opt/ServUO/Scripts/Custom/
 
     echo "================================================================================"
     echo "Copying custom TelnetConsole scripts"
