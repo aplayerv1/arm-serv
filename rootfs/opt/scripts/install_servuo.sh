@@ -30,6 +30,14 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     cp /opt/scripts/TelnetConsole/*.cs /opt/ServUO/Scripts/Custom/TelnetConsole/
 
     echo "================================================================================"
+    echo "Copying custom Webserver scripts"
+    echo "================================================================================"
+
+    mkdir -p /opt/ServUO/Scripts/Custom/Webserver
+    cp /opt/scripts/Webserver/*.cs /opt/ServUO/Scripts/Custom/Webserver/
+    cp /opt/scripts/Webserver/map.html /opt/ServUO
+
+    echo "================================================================================"
     echo "Building Microsoft stuff scripts..."
     echo "================================================================================"
 
