@@ -49,7 +49,7 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     DOTNET_CLI_HOME=/opt/ServUO dotnet build --self-contained true -p:PublishSingleFile=false
 
     chmod -R 777 /opt/ServUO/
-
+    chmod -R 777 /opt/ServUO/Saves
 else
     echo "ServUO already built — skipping clone and build steps."
 fi
