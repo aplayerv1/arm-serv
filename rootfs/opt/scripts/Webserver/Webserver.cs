@@ -8,7 +8,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json; // Use Newtonsoft.Json for JSON serialization
+using System.Web.Script.Serialization; // <-- New serializer
 using Server;
 using Server.Mobiles;
 using Server.Items;
@@ -65,7 +65,6 @@ namespace Server.Custom
                     }
                     else if (ctx.Request.RawUrl.StartsWith("/map"))
                     {
-                        // Parse query params: x, y, width, height
                         var qs = ctx.Request.QueryString;
                         int x, y, width, height;
                         if (int.TryParse(qs["x"], out x) &&
@@ -105,7 +104,6 @@ namespace Server.Custom
                     }
                     else
                     {
-                        // Serve basic client HTML for the map viewer
                         if (ctx.Request.RawUrl == "/" || ctx.Request.RawUrl == "/index.html")
                         {
                             ctx.Response.ContentType = "text/html";
@@ -168,6 +166,8 @@ namespace Server.Custom
 
         private static async Task BroadcastPlayerPositionsLoop(CancellationToken token)
         {
+            var serializer = new JavaScriptSerializer();
+
             while (!token.IsCancellationRequested)
             {
                 var players = new List<PlayerData>();
@@ -189,7 +189,7 @@ namespace Server.Custom
                     }
                 }
 
-                var json = JsonConvert.SerializeObject(players);
+                var json = serializer.Serialize(players);
                 var buffer = Encoding.UTF8.GetBytes(json);
 
                 lock (_sockets)
@@ -210,10 +210,8 @@ namespace Server.Custom
             }
         }
 
-        // Map tile rendering parameters
-        private const int TilePixelSize = 24; // Size of each tile in pixels
+        private const int TilePixelSize = 24;
 
-        // Dynamically render map portion to bitmap
         private static Bitmap RenderMap(int startX, int startY, int width, int height)
         {
             Bitmap bmp = new Bitmap(width * TilePixelSize, height * TilePixelSize);
@@ -221,8 +219,7 @@ namespace Server.Custom
             {
                 g.Clear(Color.Black);
 
-                // Draw map tiles and statics
-                Map map = Map.Felucca; // Hardcoded for demo, can be param or dynamic
+                Map map = Map.Felucca;
 
                 for (int dx = 0; dx < width; dx++)
                 {
@@ -235,7 +232,6 @@ namespace Server.Custom
                     }
                 }
 
-                // Overlay players as red rectangles
                 foreach (var mobile in World.Mobiles.Values)
                 {
                     var player = mobile as PlayerMobile;
@@ -261,7 +257,6 @@ namespace Server.Custom
 
         private static void DrawTile(Graphics g, Map map, int x, int y, int screenX, int screenY)
         {
-            // Draw land tile
             var landTile = map.Tiles.GetLandTile(x, y);
             Color landColor = GetLandTileColor(landTile.ID);
             using (Brush brush = new SolidBrush(landColor))
@@ -269,37 +264,32 @@ namespace Server.Custom
                 g.FillRectangle(brush, screenX, screenY, TilePixelSize, TilePixelSize);
             }
 
-            // Draw statics on top (like trees)
             var statics = map.Tiles.GetStaticTiles(x, y);
             foreach (var stat in statics)
             {
                 Color staticColor = GetStaticTileColor(stat.ID);
                 using (Brush staticBrush = new SolidBrush(staticColor))
                 {
-                    // Draw smaller rectangle in center
                     int size = TilePixelSize / 2;
                     g.FillEllipse(staticBrush, screenX + TilePixelSize / 4, screenY + TilePixelSize / 4, size, size);
                 }
             }
         }
 
-        // Simplified mapping: map land tile IDs to color
         private static Color GetLandTileColor(int tileID)
         {
-            // Replace C# 8 switch expression with classic if-else
             if (tileID >= 0x00 && tileID <= 0x3E)
-                return Color.Green;   // Grass
+                return Color.Green;
             else if (tileID >= 0x3F && tileID <= 0x6F)
-                return Color.SandyBrown; // Dirt/sand
+                return Color.SandyBrown;
             else if (tileID >= 0x70 && tileID <= 0x9F)
-                return Color.Gray;   // Rock
+                return Color.Gray;
             else
                 return Color.DarkGreen;
         }
 
         private static Color GetStaticTileColor(int tileID)
         {
-            // Simple statics palette for demo (trees, bushes)
             if ((tileID >= 0x0E00 && tileID <= 0x0EFF) || (tileID >= 0x25A && tileID <= 0x280))
                 return Color.DarkGreen;
 
@@ -347,22 +337,15 @@ namespace Server.Custom
 <script>
   const mapContainer = document.getElementById('mapContainer');
   const mapImg = document.getElementById('mapImg');
-
-  // Tile size from server
   const tilePixelSize = 24;
-
-  // Viewport coords (must match server default)
   let viewport = { x: 100, y: 100, width: 20, height: 15 };
 
-  // WebSocket for player updates
   const ws = new WebSocket('ws://' + location.host + '/players');
   ws.onmessage = function(event) {
     const players = JSON.parse(event.data);
-    // Clear old markers
     document.querySelectorAll('.player-marker').forEach(e => e.remove());
 
     players.forEach(p => {
-      // Only show players in this map and viewport
       if (p.Map === 'Felucca' &&
           p.X >= viewport.x && p.X < viewport.x + viewport.width &&
           p.Y >= viewport.y && p.Y < viewport.y + viewport.height) {
