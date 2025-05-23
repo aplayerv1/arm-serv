@@ -310,12 +310,22 @@ namespace Server.Custom
 
         private static Color GetLandTileColor(int tileID)
         {
-            if (tileID >= 0x00 && tileID <= 0x3E)
-                return Color.Green;
-            else if (tileID >= 0x3F && tileID <= 0x6F)
+            // Water tiles
+            if (tileID >= 0x00 && tileID <= 0x15)
+                return Color.DarkBlue;
+            // Sand/desert
+            else if (tileID >= 0x16 && tileID <= 0x3E)
                 return Color.SandyBrown;
+            // Grass/plains
+            else if (tileID >= 0x3F && tileID <= 0x6F)
+                return Color.ForestGreen;
+            // Mountains/rocks
             else if (tileID >= 0x70 && tileID <= 0x9F)
                 return Color.Gray;
+            // Snow
+            else if (tileID >= 0xA0 && tileID <= 0xC5)
+                return Color.White;
+            // Default
             else
                 return Color.DarkGreen;
         }
@@ -372,7 +382,7 @@ namespace Server.Custom
   const tilePixelSize = 24;
   let viewport = { x: 100, y: 100, width: 20, height: 15 };
 
-  const ws = new WebSocket('ws://' + location.host + '/players');
+  const ws = new WebSocket('ws://' + window.location.host + '/players');
   ws.onmessage = function(event) {
     const players = JSON.parse(event.data);
     document.querySelectorAll('.player-marker').forEach(e => e.remove());
