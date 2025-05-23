@@ -627,10 +627,9 @@ namespace Server.Custom
             // For now, we'll use our simpler implementation
             return GetMapSectionFromMul(mapIndex, startX, startY, width, height);
         }
-
         private static string GetHtmlPage(int port)
         {
-            return $@"
+             return $@"
 <!DOCTYPE html>
 <html lang='en'>
 <head>
@@ -819,42 +818,42 @@ namespace Server.Custom
   
   // Map boundaries for each map
   const mapBounds = [
-    { width: 6144, height: 4096 }, // Felucca
-    { width: 6144, height: 4096 }, // Trammel
-    { width: 2304, height: 1600 }, // Ilshenar
-    { width: 2560, height: 2048 }, // Malas
-    { width: 1448, height: 1448 }  // Tokuno
+    {{ width: 6144, height: 4096 }}, // Felucca
+    {{ width: 6144, height: 4096 }}, // Trammel
+    {{ width: 2304, height: 1600 }}, // Ilshenar
+    {{ width: 2560, height: 2048 }}, // Malas
+    {{ width: 1448, height: 1448 }}  // Tokuno
   ];
   
   // City locations for each map
-  const locations = {
-    '0': { // Felucca
-      britain: { x: 1400, y: 1600 },
-      minoc: { x: 2500, y: 500 },
-      trinsic: { x: 1900, y: 2800 }
-    },
-    '1': { // Trammel (same as Felucca)
-      britain: { x: 1400, y: 1600 },
-      minoc: { x: 2500, y: 500 },
-      trinsic: { x: 1900, y: 2800 }
-    },
-    '2': { // Ilshenar
-      compassion: { x: 1215, y: 467 },
-      honesty: { x: 722, y: 1366 },
-      valor: { x: 528, y: 187 }
-    },
-    '3': { // Malas
-      luna: { x: 1000, y: 500 },
-      umbra: { x: 1997, y: 1386 }
-    },
-    '4': { // Tokuno
-      makoto: { x: 802, y: 1204 },
-      homare: { x: 270, y: 320 }
-    }
-  };
+  const locations = {{
+    '0': {{ // Felucca
+      britain: {{ x: 1400, y: 1600 }},
+      minoc: {{ x: 2500, y: 500 }},
+      trinsic: {{ x: 1900, y: 2800 }}
+    }},
+    '1': {{ // Trammel (same as Felucca)
+      britain: {{ x: 1400, y: 1600 }},
+      minoc: {{ x: 2500, y: 500 }},
+      trinsic: {{ x: 1900, y: 2800 }}
+    }},
+    '2': {{ // Ilshenar
+      compassion: {{ x: 1215, y: 467 }},
+      honesty: {{ x: 722, y: 1366 }},
+      valor: {{ x: 528, y: 187 }}
+    }},
+    '3': {{ // Malas
+      luna: {{ x: 1000, y: 500 }},
+      umbra: {{ x: 1997, y: 1386 }}
+    }},
+    '4': {{ // Tokuno
+      makoto: {{ x: 802, y: 1204 }},
+      homare: {{ x: 270, y: 320 }}
+    }}
+  }};
   
   // Viewport state
-  let state = {
+  let state = {{
     mapIndex: 0,
     centerX: 1000,
     centerY: 1000,
@@ -865,10 +864,10 @@ namespace Server.Custom
     lastMouseY: 0,
     players: [],
     pendingRequest: false
-  };
+  }};
   
   // Calculate viewport dimensions based on container size and zoom
-  function getViewport() {
+  function getViewport() {{
     const containerWidth = mapContainer.clientWidth;
     const containerHeight = mapContainer.clientHeight;
     
@@ -880,20 +879,20 @@ namespace Server.Custom
     const startX = Math.floor(state.centerX - tilesWide / 2);
     const startY = Math.floor(state.centerY - tilesHigh / 2);
     
-    return {
+    return {{
       startX,
       startY,
       width: tilesWide,
       height: tilesHigh,
       effectiveTileSize
-    };
-  }
+    }};
+  }}
   
   // Update the map display
-  function updateMap() {
-    if (state.pendingRequest) {
+  function updateMap() {{
+    if (state.pendingRequest) {{
       return; // Don't send multiple requests at once
-    }
+    }}
     
     loading.style.display = 'block';
     state.pendingRequest = true;
@@ -914,7 +913,7 @@ namespace Server.Custom
     // Create a new image to prevent flickering
     const newImg = new Image();
     
-    newImg.onload = function() {
+    newImg.onload = function() {{
       // Replace the old image
       mapImg.src = newImg.src;
       
@@ -932,22 +931,22 @@ namespace Server.Custom
       
       // Update player markers
       updatePlayerMarkers();
-    };
+    }};
     
-    newImg.onerror = function() {
+    newImg.onerror = function() {{
       console.error('Failed to load map');
       loading.style.display = 'none';
       state.pendingRequest = false;
       
       // Try with smaller dimensions if we failed
-      if (requestWidth > 50 || requestHeight > 50) {
+      if (requestWidth > 50 || requestHeight > 50) {{
         state.zoom = Math.max(0.5, state.zoom * 0.8);
         setTimeout(updateMap, 500); // Retry after a delay
-      }
-    };
+      }}
+    }};
     
     // Set the source to request the map
-    newImg.src = `/map?x=${requestX}&y=${requestY}&width=${requestWidth}&height=${requestHeight}&map=${state.mapIndex}&t=${Date.now()}`;
+    newImg.src = `/map?x=${{requestX}}&y=${{requestY}}&width=${{requestWidth}}&height=${{requestHeight}}&map=${{state.mapIndex}}&t=${{Date.now()}}`;
     
     // Update coordinate display
     viewX.textContent = Math.floor(state.centerX);
@@ -957,25 +956,25 @@ namespace Server.Custom
     
     // Update map selector
     mapSelect.value = state.mapIndex;
-  }
+  }}
   
   // Update player markers on the map
-  function updatePlayerMarkers() {
+  function updatePlayerMarkers() {{
     // Remove existing markers
     document.querySelectorAll('.player-marker').forEach(e => e.remove());
     
     const viewport = getViewport();
     
-    state.players.forEach(p => {
+    state.players.forEach(p => {{
       // Check if player is on the current map
-      if (p.Map === mapNames[state.mapIndex]) {
+      if (p.Map === mapNames[state.mapIndex]) {{
         // Calculate screen position
         const screenX = (p.X - viewport.startX) * viewport.effectiveTileSize;
         const screenY = (p.Y - viewport.startY) * viewport.effectiveTileSize;
         
         // Check if player is visible in the current view
         if (screenX >= 0 && screenX <= mapContainer.clientWidth &&
-            screenY >= 0 && screenY <= mapContainer.clientHeight) {
+            screenY >= 0 && screenY <= mapContainer.clientHeight) {{
           
           const marker = document.createElement('div');
           marker.className = 'player-marker';
@@ -983,13 +982,13 @@ namespace Server.Custom
           marker.style.top = screenY + 'px';
           marker.title = p.Name;
           mapContainer.appendChild(marker);
-        }
-      }
-    });
-  }
+        }}
+      }}
+    }});
+  }}
   
   // Handle map selection change
-  mapSelect.addEventListener('change', () => {
+  mapSelect.addEventListener('change', () => {{
     state.mapIndex = parseInt(mapSelect.value);
     
     // Reset to center of map
@@ -998,61 +997,61 @@ namespace Server.Custom
     state.centerY = Math.floor(currentBounds.height / 2);
     
     updateMap();
-  });
+  }});
   
   // Reset view button
-  document.getElementById('resetView').addEventListener('click', () => {
+  document.getElementById('resetView').addEventListener('click', () => {{
     const currentBounds = mapBounds[state.mapIndex];
     state.centerX = Math.floor(currentBounds.width / 2);
     state.centerY = Math.floor(currentBounds.height / 2);
     state.zoom = 1.0;
     updateMap();
-  });
+  }});
   
   // Zoom controls
-  document.getElementById('zoomIn').addEventListener('click', () => {
+  document.getElementById('zoomIn').addEventListener('click', () => {{
     state.zoom = Math.min(4.0, state.zoom * 1.5);
     updateMap();
-  });
+  }});
   
-  document.getElementById('zoomOut').addEventListener('click', () => {
+  document.getElementById('zoomOut').addEventListener('click', () => {{
     state.zoom = Math.max(0.2, state.zoom / 1.5);
     updateMap();
-  });
+  }});
   
   // Location buttons
-  document.getElementById('showBritain').addEventListener('click', () => {
+  document.getElementById('showBritain').addEventListener('click', () => {{
     const loc = locations[state.mapIndex]?.britain;
-    if (loc) {
+    if (loc) {{
       state.centerX = loc.x;
       state.centerY = loc.y;
       state.zoom = 1.0;
       updateMap();
-    }
-  });
+    }}
+  }});
   
-  document.getElementById('showMinoc').addEventListener('click', () => {
+  document.getElementById('showMinoc').addEventListener('click', () => {{
     const loc = locations[state.mapIndex]?.minoc;
-    if (loc) {
+    if (loc) {{
       state.centerX = loc.x;
       state.centerY = loc.y;
       state.zoom = 1.0;
       updateMap();
-    }
-  });
+    }}
+  }});
   
-  document.getElementById('showTrinsic').addEventListener('click', () => {
+  document.getElementById('showTrinsic').addEventListener('click', () => {{
     const loc = locations[state.mapIndex]?.trinsic;
-    if (loc) {
+    if (loc) {{
       state.centerX = loc.x;
       state.centerY = loc.y;
       state.zoom = 1.0;
       updateMap();
-    }
-  });
+    }}
+  }});
   
   // Mouse wheel zoom
-  mapContainer.addEventListener('wheel', (e) => {
+  mapContainer.addEventListener('wheel', (e) => {{
     e.preventDefault();
     
     // Get mouse position relative to container
@@ -1066,13 +1065,13 @@ namespace Server.Custom
     const mapY = viewport.startY + mouseY / viewport.effectiveTileSize;
     
     // Adjust zoom level
-    if (e.deltaY < 0) {
+    if (e.deltaY < 0) {{
       // Zoom in
       state.zoom = Math.min(4.0, state.zoom * 1.1);
-    } else {
+    }} else {{
       // Zoom out
       state.zoom = Math.max(0.2, state.zoom / 1.1);
-    }
+    }}
     
     // Calculate new viewport
     const newViewport = getViewport();
@@ -1082,20 +1081,20 @@ namespace Server.Custom
     state.centerY = mapY - (mouseY / newViewport.effectiveTileSize - viewport.startY);
     
     updateMap();
-  });
+  }});
   
   // Mouse drag to pan
-  mapContainer.addEventListener('mousedown', (e) => {
-    if (e.button === 0) { // Left mouse button
+  mapContainer.addEventListener('mousedown', (e) => {{
+    if (e.button === 0) {{ // Left mouse button
       state.isDragging = true;
       state.lastMouseX = e.clientX;
       state.lastMouseY = e.clientY;
       mapContainer.style.cursor = 'grabbing';
-    }
-  });
+    }}
+  }});
   
-  window.addEventListener('mousemove', (e) => {
-    if (state.isDragging) {
+  window.addEventListener('mousemove', (e) => {{
+    if (state.isDragging) {{
       const dx = e.clientX - state.lastMouseX;
       const dy = e.clientY - state.lastMouseY;
       
@@ -1113,18 +1112,18 @@ namespace Server.Custom
       state.lastMouseY = e.clientY;
       
       updateMap();
-    }
-  });
+    }}
+  }});
   
-  window.addEventListener('mouseup', () => {
-    if (state.isDragging) {
+  window.addEventListener('mouseup', () => {{
+    if (state.isDragging) {{
       state.isDragging = false;
       mapContainer.style.cursor = 'grab';
-    }
-  });
+    }}
+  }});
   
   // Double click to center and zoom in
-  mapContainer.addEventListener('dblclick', (e) => {
+  mapContainer.addEventListener('dblclick', (e) => {{
     // Get mouse position relative to container
     const rect = mapContainer.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -1141,44 +1140,44 @@ namespace Server.Custom
     state.zoom = Math.min(4.0, state.zoom * 1.5);
     
     updateMap();
-  });
+  }});
   
   // WebSocket connection for player positions
   const ws = new WebSocket('ws://' + window.location.host + '/players');
-  ws.onmessage = function(event) {
+  ws.onmessage = function(event) {{
     state.players = JSON.parse(event.data);
     updatePlayerMarkers();
-  };
+  }};
   
   // Handle window resize
-  window.addEventListener('resize', () => {
+  window.addEventListener('resize', () => {{
     updateMap();
-  });
+  }});
   
   // Handle touch events for mobile devices
   let touchStartX, touchStartY;
   let initialPinchDistance = 0;
   
-  mapContainer.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 1) {
+  mapContainer.addEventListener('touchstart', (e) => {{
+    if (e.touches.length === 1) {{
       // Single touch - prepare for panning
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
       state.lastMouseX = touchStartX;
       state.lastMouseY = touchStartY;
       state.isDragging = true;
-    } else if (e.touches.length === 2) {
+    }} else if (e.touches.length === 2) {{
       // Two touches - prepare for pinch zoom
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
-    }
-  });
+    }}
+  }});
   
-  mapContainer.addEventListener('touchmove', (e) => {
+  mapContainer.addEventListener('touchmove', (e) => {{
     e.preventDefault(); // Prevent scrolling
     
-    if (e.touches.length === 1 && state.isDragging) {
+    if (e.touches.length === 1 && state.isDragging) {{
       // Single touch - pan
       const touchX = e.touches[0].clientX;
       const touchY = e.touches[0].clientY;
@@ -1200,13 +1199,13 @@ namespace Server.Custom
       state.lastMouseY = touchY;
       
       updateMap();
-    } else if (e.touches.length === 2) {
+    }} else if (e.touches.length === 2) {{
       // Two touches - pinch zoom
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const pinchDistance = Math.sqrt(dx * dx + dy * dy);
       
-      if (initialPinchDistance > 0) {
+      if (initialPinchDistance > 0) {{
         // Calculate zoom factor
         const zoomFactor = pinchDistance / initialPinchDistance;
         
@@ -1225,7 +1224,6 @@ namespace Server.Custom
         
         // Adjust zoom level
         const oldZoom = state.zoom;
-        const oldZoom = state.zoom;
         state.zoom = Math.max(0.2, Math.min(4.0, oldZoom * zoomFactor));
         
         // Adjust center to keep touch center over same map point
@@ -1235,28 +1233,28 @@ namespace Server.Custom
         
         initialPinchDistance = pinchDistance;
         updateMap();
-      }
-    }
-  });
+      }}
+    }}
+  }});
   
-  mapContainer.addEventListener('touchend', () => {
+  mapContainer.addEventListener('touchend', () => {{
     state.isDragging = false;
     initialPinchDistance = 0;
-  });
+  }});
   
   // Prevent context menu on right click
-  mapContainer.addEventListener('contextmenu', (e) => {
+  mapContainer.addEventListener('contextmenu', (e) => {{
     e.preventDefault();
-  });
+  }});
   
   // Initialize the map
   updateMap();
   
   // Add keyboard navigation
-  window.addEventListener('keydown', (e) => {
+  window.addEventListener('keydown', (e) => {{
     const moveAmount = 10 / state.zoom; // Move more when zoomed out
     
-    switch(e.key) {
+    switch(e.key) {{
       case 'ArrowUp':
         state.centerY -= moveAmount;
         updateMap();
@@ -1294,12 +1292,14 @@ namespace Server.Custom
         updateMap();
         e.preventDefault();
         break;
-    }
-  });
+    }}
+  }});
 </script>
 </body>
 </html>
 ";
-        }
+}
+
+  
     }
 }
