@@ -51,18 +51,6 @@ if [ ! -f /opt/ServUO/ServUO.exe ]; then
     dpkg -i packages-microsoft-prod.deb
     apt update
     apt install -y dotnet-sdk-7.0
-
-    echo "================================================================================"
-    echo "Building ServUO scripts..."
-    echo "================================================================================"
-    export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
-    export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
-    cd /opt/ServUO
-    nuget install Newtonsoft.Json
-    DOTNET_CLI_HOME=/opt/ServUO dotnet build --self-contained true -p:PublishSingleFile=false
-
-    chmod -R 777 /opt/ServUO/
-    chmod -R 777 /opt/ServUO/Saves
 else
     echo "ServUO already built — skipping clone and build steps."
 fi

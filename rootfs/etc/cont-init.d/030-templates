@@ -18,7 +18,7 @@ if [ ! -f "$ACCOUNT_FILE" ]; then
     mkdir -p "$ACCOUNT_DIR"
     chmod 755 "$ACCOUNT_DIR"
 
-    /opt/scripts/mm.pl /opt/files/config/
+    perl /opt/scripts/mm.pl /opt/files/config/ --verbose
 else 
     echo "================================================================================"
     echo "accounts.xml exists, skipping template conversion."
