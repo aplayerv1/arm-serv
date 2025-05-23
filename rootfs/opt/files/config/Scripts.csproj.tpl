@@ -1,4 +1,4 @@
-﻿#####/opt/ServUO/Scripts/Scripts/Scripts.csproj#####
+﻿#####/opt/ServUO/Scripts/Scripts.csproj#####
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<TargetFramework>net48</TargetFramework>
