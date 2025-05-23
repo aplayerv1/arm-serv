@@ -10,6 +10,10 @@ namespace Server
 
         public static SaveStrategy Acquire()
         {
+            // Force DualSaveStrategy for Linux compatibility
+            return new DualSaveStrategy();
+            
+            /* Original code commented out to prevent Linux compatibility issues
             if (Core.MultiProcessor)
             {
                 int processorCount = Core.ProcessorCount;
@@ -33,6 +37,7 @@ namespace Server
             {
                 return new StandardSaveStrategy();
             }
+            */
         }
 
         public abstract void Save(SaveMetrics metrics, bool permitBackgroundWrite);
