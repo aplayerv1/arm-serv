@@ -332,15 +332,23 @@ namespace Server.Custom
 
         private static Color GetStaticTileColor(int tileID)
         {
-            if ((tileID >= 0x0E00 && tileID <= 0x0EFF) || (tileID >= 0x25A && tileID <= 0x280))
-                return Color.DarkGreen;
-
-            return Color.Brown;
+            // Trees and plants
+            if ((tileID >= 0x0C8E && tileID <= 0x0CC7) || (tileID >= 0x0CE0 && tileID <= 0x0D29))
+                return Color.FromArgb(0, 100, 0);
+            // Buildings and structures
+            else if ((tileID >= 0x0064 && tileID <= 0x0900))
+                return Color.FromArgb(139, 69, 19);
+            // Roads
+            else if (tileID >= 0x071D && tileID <= 0x07A0)
+                return Color.FromArgb(160, 160, 160);
+            // Default
+            else
+                return Color.FromArgb(120, 70, 20);
         }
 
-        private static string GetHtmlPage()
+        private static string GetHtmlPage(int port)
         {
-            return @"
+            return $@"
 <!DOCTYPE html>
 <html lang='en'>
 <head>
@@ -348,18 +356,25 @@ namespace Server.Custom
 <meta name='viewport' content='width=device-width, initial-scale=1' />
 <title>ServUO Dynamic Map</title>
 <style>
-  #mapContainer {
+  body {{
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+  }}
+  #mapContainer {{
     position: relative;
-    width: 480px;
-    height: 360px;
+    width: 800px;
+    height: 600px;
     border: 1px solid black;
-  }
-  #mapImg {
+    overflow: hidden;
+    margin-bottom: 10px;
+  }}
+  #mapImg {{
     image-rendering: pixelated;
-    width: 480px;
-    height: 360px;
-  }
-  .player-marker {
+    width: 100%;
+    height: 100%;
+  }}
+  .player-marker {{
     position: absolute;
     width: 16px;
     height: 16px;
@@ -367,33 +382,170 @@ namespace Server.Custom
     border-radius: 50%;
     pointer-events: none;
     transform: translate(-50%, -50%);
-  }
+  }}
+  .controls {{
+    margin-bottom: 15px;
+  }}
+  button {{
+    padding: 5px 10px;
+    margin-right: 5px;
+  }}
+  #coordinates {{
+    margin-top: 10px;
+  }}
 </style>
 </head>
 <body>
-<h1>ServUO Dynamic Map (Port 8822)</h1>
+<h1>ServUO Dynamic Map (Port {port})</h1>
+
+<div class='controls'>
+  <button id='zoomIn'>Zoom In</button>
+  <button id='zoomOut'>Zoom Out</button>
+  <button id='moveNorth'>North</button>
+  <button id='moveSouth'>South</button>
+  <button id='moveWest'>West</button>
+  <button id='moveEast'>East</button>
+  <button id='showBritain'>Britain</button>
+  <button id='showMinoc'>Minoc</button>
+  <button id='showTrinsic'>Trinsic</button>
+  <button id='showFullMap'>Full Map</button>
+</div>
+
 <div id='mapContainer'>
-  <img id='mapImg' src='/map?x=100&y=100&width=20&height=15' />
+  <img id='mapImg' src='/map?x=1000&y=1000&width=40&height=30' />
+</div>
+
+<div id='coordinates'>
+  Viewing: X: <span id='viewX'>1000</span>, Y: <span id='viewY'>1000</span>, 
+  Width: <span id='viewWidth'>40</span>, Height: <span id='viewHeight'>30</span>
 </div>
 
 <script>
   const mapContainer = document.getElementById('mapContainer');
   const mapImg = document.getElementById('mapImg');
+  const viewX = document.getElementById('viewX');
+  const viewY = document.getElementById('viewY');
+  const viewWidth = document.getElementById('viewWidth');
+  const viewHeight = document.getElementById('viewHeight');
   const tilePixelSize = 24;
-  let viewport = { x: 100, y: 100, width: 20, height: 15 };
-
+  
+  // Initial viewport settings
+  let viewport = {{ x: 1000, y: 1000, width: 40, height: 30 }};
+  
+  // Map boundaries (Felucca)
+  const mapBounds = {{ width: 6144, height: 4096 }};
+  
+  // City locations
+  const locations = {{
+    britain: {{ x: 1400, y: 1600, width: 40, height: 30 }},
+    minoc: {{ x: 2500, y: 500, width: 40, height: 30 }},
+    trinsic: {{ x: 1900, y: 2800, width: 40, height: 30 }},
+    fullMap: {{ x: 0, y: 0, width: 200, height: 150 }}
+  }};
+  
+  // Update the map with current viewport
+  function updateMap() {{
+    // Ensure viewport stays within map bounds
+    viewport.x = Math.max(0, Math.min(mapBounds.width - viewport.width, viewport.x));
+    viewport.y = Math.max(0, Math.min(mapBounds.height - viewport.height, viewport.y));
+    
+    // Update the map image
+    mapImg.src = `/map?x=${{viewport.x}}&y=${{viewport.y}}&width=${{viewport.width}}&height=${{viewport.height}}`;
+    
+    // Update coordinate display
+    viewX.textContent = viewport.x;
+    viewY.textContent = viewport.y;
+    viewWidth.textContent = viewport.width;
+    viewHeight.textContent = viewport.height;
+    
+    // Clear existing player markers
+    document.querySelectorAll('.player-marker').forEach(e => e.remove());
+  }}
+  
+  // Navigation controls
+  document.getElementById('zoomIn').addEventListener('click', () => {{
+    if (viewport.width > 10 && viewport.height > 10) {{
+      const centerX = viewport.x + viewport.width / 2;
+      const centerY = viewport.y + viewport.height / 2;
+      viewport.width = Math.floor(viewport.width * 0.7);
+      viewport.height = Math.floor(viewport.height * 0.7);
+      viewport.x = Math.floor(centerX - viewport.width / 2);
+      viewport.y = Math.floor(centerY - viewport.height / 2);
+      updateMap();
+    }}
+  }});
+  
+  document.getElementById('zoomOut').addEventListener('click', () => {{
+    if (viewport.width < 200 && viewport.height < 150) {{
+      const centerX = viewport.x + viewport.width / 2;
+      const centerY = viewport.y + viewport.height / 2;
+      viewport.width = Math.floor(viewport.width * 1.5);
+      viewport.height = Math.floor(viewport.height * 1.5);
+      viewport.x = Math.floor(centerX - viewport.width / 2);
+      viewport.y = Math.floor(centerY - viewport.height / 2);
+      updateMap();
+    }}
+  }});
+  
+  document.getElementById('moveNorth').addEventListener('click', () => {{
+    viewport.y = Math.max(0, viewport.y - Math.floor(viewport.height / 2));
+    updateMap();
+  }});
+  
+  document.getElementById('moveSouth').addEventListener('click', () => {{
+    viewport.y = Math.min(mapBounds.height - viewport.height, viewport.y + Math.floor(viewport.height / 2));
+    updateMap();
+  }});
+  
+  document.getElementById('moveWest').addEventListener('click', () => {{
+    viewport.x = Math.max(0, viewport.x - Math.floor(viewport.width / 2));
+    updateMap();
+  }});
+  
+  document.getElementById('moveEast').addEventListener('click', () => {{
+    viewport.x = Math.min(mapBounds.width - viewport.width, viewport.x + Math.floor(viewport.width / 2));
+    updateMap();
+  }});
+  
+  // City shortcuts
+  document.getElementById('showBritain').addEventListener('click', () => {{
+    viewport = {{ ...locations.britain }};
+    updateMap();
+  }});
+  
+  document.getElementById('showMinoc').addEventListener('click', () => {{
+    viewport = {{ ...locations.minoc }};
+    updateMap();
+  }});
+  
+  document.getElementById('showTrinsic').addEventListener('click', () => {{
+    viewport = {{ ...locations.trinsic }};
+    updateMap();
+  }});
+  
+  document.getElementById('showFullMap').addEventListener('click', () => {{
+    viewport = {{ ...locations.fullMap }};
+    updateMap();
+  }});
+  
+  // WebSocket connection for player positions
   const ws = new WebSocket('ws://' + window.location.host + '/players');
-  ws.onmessage = function(event) {
+  ws.onmessage = function(event) {{
     const players = JSON.parse(event.data);
     document.querySelectorAll('.player-marker').forEach(e => e.remove());
 
-    players.forEach(p => {
+    players.forEach(p => {{
       if (p.Map === 'Felucca' &&
           p.X >= viewport.x && p.X < viewport.x + viewport.width &&
-          p.Y >= viewport.y && p.Y < viewport.y + viewport.height) {
+          p.Y >= viewport.y && p.Y < viewport.y + viewport.height) {{
 
-        const px = (p.X - viewport.x) * tilePixelSize;
-        const py = (p.Y - viewport.y) * tilePixelSize;
+        const containerWidth = mapContainer.clientWidth;
+        const containerHeight = mapContainer.clientHeight;
+        const tileWidth = containerWidth / viewport.width;
+        const tileHeight = containerHeight / viewport.height;
+        
+        const px = ((p.X - viewport.x) / viewport.width) * containerWidth;
+        const py = ((p.Y - viewport.y) / viewport.height) * containerHeight;
 
         const marker = document.createElement('div');
         marker.className = 'player-marker';
@@ -401,13 +553,51 @@ namespace Server.Custom
         marker.style.top = py + 'px';
         marker.title = p.Name;
         mapContainer.appendChild(marker);
-      }
-    });
-  };
+      }}
+    }});
+  }};
+  
+  // Allow dragging the map
+  let isDragging = false;
+  let dragStartX, dragStartY;
+  let viewportStartX, viewportStartY;
+  
+  mapContainer.addEventListener('mousedown', (e) => {{
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    viewportStartX = viewport.x;
+    viewportStartY = viewport.y;
+    mapContainer.style.cursor = 'grabbing';
+  }});
+  
+  window.addEventListener('mousemove', (e) => {{
+    if (isDragging) {{
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      
+      const tileWidth = mapContainer.clientWidth / viewport.width;
+      const tileHeight = mapContainer.clientHeight / viewport.height;
+      
+      const tilesX = Math.floor(dx / tileWidth);
+      const tilesY = Math.floor(dy / tileHeight);
+      
+      viewport.x = Math.max(0, Math.min(mapBounds.width - viewport.width, viewportStartX - tilesX));
+      viewport.y = Math.max(0, Math.min(mapBounds.height - viewport.height, viewportStartY - tilesY));
+      
+      updateMap();
+    }}
+  }});
+  
+  window.addEventListener('mouseup', () => {{
+    isDragging = false;
+    mapContainer.style.cursor = 'grab';
+  }});
+  
+  // Initialize
+  mapContainer.style.cursor = 'grab';
 </script>
 </body>
 </html>
 ";
-        }
-    }
 }
