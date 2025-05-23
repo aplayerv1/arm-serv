@@ -20,6 +20,7 @@ namespace Server.Custom
         private static HttpListener _listener;
         private static List<WebSocket> _sockets = new List<WebSocket>();
         private static CancellationTokenSource _cts;
+        private static int _serverPort = 0; // Add this to store the port
 
        public static void Initialize()
         {
@@ -41,11 +42,12 @@ namespace Server.Custom
                     _listener.Prefixes.Add(prefix);
                     _listener.Start();
 
+                    _serverPort = tryPort; // Store the successful port
                     Console.WriteLine($"[Webserver] Started on port {tryPort}");
                     started = true;
                     break;
                 }
-                catch (HttpListenerException ex)
+                catch (HttpListenerException) // Remove unused variable
                 {
                     Console.WriteLine($"[Webserver] Port {tryPort} is in use. Trying next port...");
                     // Dispose current listener and create a new one for next attempt
@@ -143,13 +145,8 @@ namespace Server.Custom
                             ctx.Response.ContentType = "text/html";
                             using (var writer = new StreamWriter(ctx.Response.OutputStream))
                             {
-                                await writer.WriteAsync(GetHtmlPage());
+                                await writer.WriteAsync(GetHtmlPage(_serverPort)); // Pass the port here
                             }
-                            ctx.Response.Close();
-                        }
-                        else
-                        {
-                            ctx.Response.StatusCode = 404;
                             ctx.Response.Close();
                         }
                     }
@@ -419,7 +416,6 @@ namespace Server.Custom
   Viewing: X: <span id='viewX'>1000</span>, Y: <span id='viewY'>1000</span>, 
   Width: <span id='viewWidth'>40</span>, Height: <span id='viewHeight'>30</span>
 </div>
-
 <script>
   const mapContainer = document.getElementById('mapContainer');
   const mapImg = document.getElementById('mapImg');
@@ -600,4 +596,6 @@ namespace Server.Custom
 </body>
 </html>
 ";
+        }
+    }
 }
