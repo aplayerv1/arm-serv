@@ -1,68 +1,46 @@
 #!/usr/bin/with-contenv bash
+set -e
 
 echo "================================================================================"
 echo "Running install_serv.sh as $(whoami)"
 echo "================================================================================"
 
-# Ensure system is updated and mono is installed
-apt-get update 
-apt-get install -y mono-complete rsync nano mono-devel
+apt-get update
+apt-get install -y --no-install-recommends mono-complete rsync nano mono-devel wget gnupg
 
-echo ""
-echo "================================================================================"
-echo "Checking for existing ServUO build"
-echo "================================================================================"
+SERVUO_DIR="/opt/ServUO"
 
-# If ServUO.exe doesn't exist, clone and build
-if [ ! -f /opt/ServUO/ServUO.exe ]; then
+if [ ! -f "$SERVUO_DIR/ServUO.exe" ]; then
     echo "Cloning ServUO repository..."
-    cd /root/
-    git clone https://github.com/ServUO/ServUO.git
+    TMPDIR=$(mktemp -d)
+    git clone https://github.com/ServUO/ServUO.git "$TMPDIR"
+    rsync -av "$TMPDIR/" "$SERVUO_DIR/"
+    rm -rf "$TMPDIR"
 
-    echo "Copying ServUO to /opt..."
-    rsync -av /root/ServUO/ /opt/ServUO/
-    rm -rf /root/ServUO
-    
-    echo "================================================================================"
-    echo "Copying custom Startup scripts"
-    echo "================================================================================"
-    cp /opt/scripts/Startup/*.cs /opt/ServUO/Scripts/Custom/
+    mkdir -p "$SERVUO_DIR/Scripts/Custom/TelnetConsole"
+    mkdir -p "$SERVUO_DIR/Scripts/Custom/Webserver"
+    cp /opt/scripts/Startup/*.cs "$SERVUO_DIR/Scripts/Custom/"
+    cp /opt/scripts/TelnetConsole/*.cs "$SERVUO_DIR/Scripts/Custom/TelnetConsole/"
+    cp /opt/scripts/Webserver/*.cs "$SERVUO_DIR/Scripts/Custom/Webserver/"
+    cp /opt/scripts/Webserver/map.html "$SERVUO_DIR/index.html"
 
-    echo "================================================================================"
-    echo "Copying custom TelnetConsole scripts"
-    echo "================================================================================"
-    mkdir -p /opt/ServUO/Scripts/Custom/TelnetConsole
-    cp /opt/scripts/TelnetConsole/*.cs /opt/ServUO/Scripts/Custom/TelnetConsole/
+    echo "Installing dotnet SDK"
+    if ! command -v dotnet &> /dev/null; then
+        wget https://packages.microsoft.com/config/debian/11/packages-microsoft-prod.deb
+        dpkg -i packages-microsoft-prod.deb
+        apt-get update
+        apt-get install -y dotnet-sdk-7.0
+    fi
 
-    echo "================================================================================"
-    echo "Copying custom Webserver scripts"
-    echo "================================================================================"
-
-    mkdir -p /opt/ServUO/Scripts/Custom/Webserver
-    cp /opt/scripts/Webserver/*.cs /opt/ServUO/Scripts/Custom/Webserver/
-    cp /opt/scripts/Webserver/map.html /opt/ServUO/index.html
-
-    echo "================================================================================"
-    echo "Building Microsoft stuff scripts..."
-    echo "================================================================================"
-
-    cd /tmp
-    wget https://packages.microsoft.com/config/debian/11/packages-microsoft-prod.deb
-    dpkg -i packages-microsoft-prod.deb
-    apt update
-    apt install -y dotnet-sdk-7.0
-
-    echo "================================================================================"
-    echo "Building ServUO scripts..."
-    echo "================================================================================"
+    echo "Building ServUO..."
     export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
-    export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools
-    cd /opt/ServUO
+    export PATH="$PATH:$HOME/.dotnet:$HOME/.dotnet/tools"
+    cd "$SERVUO_DIR"
     nuget install Newtonsoft.Json
-    DOTNET_CLI_HOME=/opt/ServUO dotnet build --self-contained true -p:PublishSingleFile=false
+    DOTNET_CLI_HOME="$SERVUO_DIR" dotnet build --self-contained true -p:PublishSingleFile=false
 
-    chmod -R 777 /opt/ServUO/
-    chmod -R 777 /opt/ServUO/Saves
+    chmod -R 755 "$SERVUO_DIR"
+    chmod -R 700 "$SERVUO_DIR/Saves"
 else
     echo "ServUO already built — skipping clone and build steps."
 fi

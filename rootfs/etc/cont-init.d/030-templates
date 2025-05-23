@@ -1,25 +1,25 @@
 #!/usr/bin/with-contenv bash
-. /opt/scripts/install.rc;
-__check_status;
+. /opt/scripts/install.rc
 
 echo "================================================================================"
 echo "Converting templates."
 echo "================================================================================"
 echo ""
-chmod 777 /opt/scripts/mm.pl;
 
-dos2unix /opt/files/config/*;
-if [ ! -f /opt/ServUO/Saves/Accounts/accounts.xml ]; then
-    rm -r /opt/ServUO/Saves/Accounts/accounts.xml;
-    mkdir -p /opt/ServUO/Saves/Accounts;
-    chmod 777 /opt/ServUO/Saves/Accounts/;
+chmod +x /opt/scripts/mm.pl
 
-    /opt/scripts/mm.pl /opt/files/config/;
+# Ensure config files are in Unix format
+dos2unix /opt/files/config/*
+
+ACCOUNT_FILE="/opt/ServUO/Saves/Accounts/accounts.xml"
+ACCOUNT_DIR="/opt/ServUO/Saves/Accounts"
+
+if [ ! -f "$ACCOUNT_FILE" ]; then
+    mkdir -p "$ACCOUNT_DIR"
+    chmod 755 "$ACCOUNT_DIR"
+
+    /opt/scripts/mm.pl /opt/files/config/
 else 
-   echo "================================================================================"
-   echo "Accounts.xml exists, skipping template conversion."
+    echo "================================================================================"
+    echo "accounts.xml exists, skipping template conversion."
 fi
-
-lastexec=$?;
-__exit $lastexec;
-
