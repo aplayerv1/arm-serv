@@ -6,6 +6,7 @@ class GeneratePasswordHash
 {
     static void Main(string[] args)
     {
+        Webserver.Dispose();
         if (args.Length != 1)
         {
             Console.WriteLine("Usage: GeneratePasswordHash <password>");

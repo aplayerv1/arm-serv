@@ -21,18 +21,49 @@ namespace Server.Custom
         private static List<WebSocket> _sockets = new List<WebSocket>();
         private static CancellationTokenSource _cts;
 
-        public static void Initialize()
+       public static void Initialize()
         {
             _cts = new CancellationTokenSource();
             _listener = new HttpListener();
-            _listener.Prefixes.Add("http://+:8822/");
-            _listener.Start();
 
-            Console.WriteLine("[Webserver] Started on port 8822");
+            int basePort = 3344;
+            int maxRetries = 10;
+            bool started = false;
+
+            for (int portOffset = 0; portOffset <= maxRetries; portOffset++)
+            {
+                int tryPort = basePort + portOffset;
+                string prefix = $"http://10.10.1.230:{tryPort}/";
+
+                try
+                {
+                    _listener.Prefixes.Clear();
+                    _listener.Prefixes.Add(prefix);
+                    _listener.Start();
+
+                    Console.WriteLine($"[Webserver] Started on port {tryPort}");
+                    started = true;
+                    break;
+                }
+                catch (HttpListenerException ex)
+                {
+                    Console.WriteLine($"[Webserver] Port {tryPort} is in use. Trying next port...");
+                    // Dispose current listener and create a new one for next attempt
+                    _listener.Close();
+                    _listener = new HttpListener();
+                }
+            }
+
+            if (!started)
+            {
+                throw new Exception("[Webserver] Failed to start HttpListener on any port from " +
+                                    $"{basePort} to {basePort + maxRetries}");
+            }
 
             Task.Run(() => ListenLoop());
             Task.Run(() => BroadcastPlayerPositionsLoop(_cts.Token));
         }
+
 
         public static void Dispose()
         {
