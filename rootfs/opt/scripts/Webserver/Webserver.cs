@@ -429,7 +429,6 @@ namespace Server.Custom
                 var landData = TileData.LandTable[tileID];
                 
                 // Use the tile name to determine a better color
-                // Use the tile name to determine a better color
                 string tileName = landData.Name.ToLower();
                 
                 // Water tiles
@@ -438,17 +437,17 @@ namespace Server.Custom
                 
                 // Sand/desert
                 else if (tileName.Contains("sand") || tileName.Contains("desert") || 
-                         (tileID >= 0x16 && tileID <= 0x3E))
+                        (tileID >= 0x16 && tileID <= 0x3E))
                     return Color.FromArgb(210, 190, 149);
                 
                 // Grass/plains
                 else if (tileName.Contains("grass") || tileName.Contains("plain") || 
-                         (tileID >= 0x3F && tileID <= 0x6F))
+                        (tileID >= 0x3F && tileID <= 0x6F))
                     return Color.FromArgb(86, 153, 86);
                 
                 // Mountains/rocks
                 else if (tileName.Contains("mountain") || tileName.Contains("rock") || 
-                         (tileID >= 0x70 && tileID <= 0x9F))
+                        (tileID >= 0x70 && tileID <= 0x9F))
                     return Color.FromArgb(144, 144, 144);
                 
                 // Snow
@@ -463,11 +462,8 @@ namespace Server.Custom
                 else if (tileName.Contains("lava"))
                     return Color.FromArgb(200, 90, 40);
                 
-                // Default - use hue from tile data
-                return Color.FromArgb(
-                    landData.Hue & 0xFF, 
-                    (landData.Hue >> 8) & 0xFF, 
-                    (landData.Hue >> 16) & 0xFF);
+                // Default - use a color based on tile ID
+                return GetDefaultColorForTileID(tileID);
             }
             catch
             {
@@ -505,7 +501,7 @@ namespace Server.Custom
                 
                 // Buildings and structures
                 else if (tileName.Contains("wall") || tileName.Contains("door") || 
-                         tileName.Contains("roof") || tileName.Contains("floor"))
+                        tileName.Contains("roof") || tileName.Contains("floor"))
                     return Color.FromArgb(139, 69, 19);
                 
                 // Roads
@@ -516,11 +512,8 @@ namespace Server.Custom
                 else if (tileName.Contains("water") || tileName.Contains("sea"))
                     return Color.FromArgb(0, 92, 148);
                 
-                // Default - use hue from tile data
-                return Color.FromArgb(
-                    staticData.Hue & 0xFF, 
-                    (staticData.Hue >> 8) & 0xFF, 
-                    (staticData.Hue >> 16) & 0xFF);
+                // Default - use a color based on tile ID
+                return GetDefaultColorForTileID(tileID);
             }
             catch
             {
@@ -536,6 +529,16 @@ namespace Server.Custom
             }
         }
 
+        // Generate a color based on tile ID for consistent coloring
+        private static Color GetDefaultColorForTileID(int tileID)
+        {
+            // Use the tile ID to generate a consistent color
+            int r = (tileID * 7) % 200 + 55; // Range 55-254
+            int g = (tileID * 13) % 200 + 55;
+            int b = (tileID * 17) % 200 + 55;
+            
+            return Color.FromArgb(r, g, b);
+        }
         private static async Task HandleWebSocket(WebSocket ws)
         {
             var buffer = new byte[1024];
