@@ -416,7 +416,6 @@ namespace Server.Custom
                             // Fill with error color (dark red)
                             using (Brush brush = new SolidBrush(Color.FromArgb(100, 0, 0)))
                             {
-                                g.FillRectangle(brush, x * pixelsPerTile, y * pixelsPerTile, pixelsPerTile,
                                 g.FillRectangle(brush, x * pixelsPerTile, y * pixelsPerTile, pixelsPerTile, pixelsPerTile);
                             }
                         }
