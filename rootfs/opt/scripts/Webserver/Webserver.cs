@@ -27,39 +27,42 @@ namespace Server.Custom
         private static int _serverPort = 0;
         private static Dictionary<int, Dictionary<string, Bitmap>> _mapCache = new Dictionary<int, Dictionary<string, Bitmap>>();
         private static readonly object _cacheLock = new object();
+        
+        // MUL file paths
+        private static string _mulDataPath = "/opt/data";
 
-        public static void Initialize()
-        {
-            _cts = new CancellationTokenSource();
-            _listener = new HttpListener();
+      public static void Initialize()
+      {
+          _cts = new CancellationTokenSource();
+          _listener = new HttpListener();
 
-            int basePort = 3344;
-            int maxRetries = 10;
-            bool started = false;
+          int basePort = 3344;
+          int maxRetries = 10;
+          bool started = false;
 
-            for (int portOffset = 0; portOffset <= maxRetries; portOffset++)
-            {
-                int tryPort = basePort + portOffset;
-                string prefix = $"http://10.10.1.230:{tryPort}/";
+          for (int portOffset = 0; portOffset <= maxRetries; portOffset++)
+          {
+              int tryPort = basePort + portOffset;
+              string prefix = $"http://+:{tryPort}/";  // Listen on ALL available IP addresses
 
-                try
-                {
-                    _listener.Prefixes.Clear();
-                    _listener.Prefixes.Add(prefix);
-                    _listener.Start();
+              try
+              {
+                  _listener.Prefixes.Clear();
+                  _listener.Prefixes.Add(prefix);
+                  _listener.Start();
 
-                    _serverPort = tryPort;
-                    Console.WriteLine($"[Webserver] Started on port {tryPort}");
-                    started = true;
-                    break;
-                }
-                catch (HttpListenerException)
-                {
-                    Console.WriteLine($"[Webserver] Port {tryPort} is in use. Trying next port...");
-                    _listener.Close();
-                    _listener = new HttpListener();
-                }
-            }
+                  _serverPort = tryPort;
+                  Console.WriteLine($"[Webserver] Started on port {tryPort} (all interfaces)");
+                  started = true;
+                  break;
+              }
+              catch (HttpListenerException)
+              {
+                  Console.WriteLine($"[Webserver] Port {tryPort} is in use. Trying next port...");
+                  _listener.Close();
+                  _listener = new HttpListener();
+              }
+          }
 
             if (!started)
             {
@@ -71,6 +74,16 @@ namespace Server.Custom
             for (int i = 0; i < Map.AllMaps.Count; i++)
             {
                 _mapCache[i] = new Dictionary<string, Bitmap>();
+            }
+
+            // Check if MUL data path exists
+            if (!Directory.Exists(_mulDataPath))
+            {
+                Console.WriteLine($"[Webserver] Warning: MUL data path {_mulDataPath} not found. Using fallback colors.");
+            }
+            else
+            {
+                Console.WriteLine($"[Webserver] Using MUL data from {_mulDataPath}");
             }
 
             Task.Run(() => ListenLoop());
@@ -178,9 +191,15 @@ namespace Server.Custom
                 int.TryParse(qs["width"], out width) &&
                 int.TryParse(qs["height"], out height))
             {
-                // Limit size to reasonable values
-                width = Math.Min(width, 100);
-                height = Math.Min(height, 75);
+                // Limit size to reasonable values but allow larger for zoom out
+                width = Math.Min(width, 200);
+                height = Math.Min(height, 150);
+                
+                // Ensure minimum size
+                width = Math.Max(width, 1);
+                height = Math.Max(height, 1);
+                
+                Console.WriteLine($"[Webserver] Map request: map={mapIndex}, x={x}, y={y}, w={width}, h={height}");
                 
                 Bitmap mapSection = null;
                 try
@@ -303,8 +322,19 @@ namespace Server.Custom
             
             Map map = Map.AllMaps[mapIndex];
             
+            // Use adaptive tile size based on zoom level (width/height indicates zoom)
+            int pixelsPerTile = 8;
+            if (width > 100 || height > 75)
+            {
+                pixelsPerTile = 4; // Smaller pixels for zoomed out view
+            }
+            if (width > 150 || height > 100)
+            {
+                pixelsPerTile = 2; // Even smaller for very zoomed out
+            }
+            
             // Create a new bitmap for the map section
-            Bitmap bmp = new Bitmap(width * 8, height * 8); // Use 8x8 pixels per tile for better detail
+            Bitmap bmp = new Bitmap(width * pixelsPerTile, height * pixelsPerTile);
             
             using (Graphics g = Graphics.FromImage(bmp))
             {
@@ -320,78 +350,109 @@ namespace Server.Custom
                         
                         // Skip if out of bounds
                         if (mapX < 0 || mapY < 0 || mapX >= map.Width || mapY >= map.Height)
-                            continue;
-                        
-                        // Get land tile
-                        var landTile = map.Tiles.GetLandTile(mapX, mapY);
-                        
-                        // Get the actual land tile color from UO data
-                        Color landColor = GetLandTileColorFromMul(landTile.ID);
-                        
-                        // Draw land tile
-                        using (Brush brush = new SolidBrush(landColor))
                         {
-                            g.FillRectangle(brush, x * 8, y * 8, 8, 8);
+                            // Fill out of bounds with dark blue (ocean)
+                            using (Brush brush = new SolidBrush(Color.FromArgb(0, 50, 100)))
+                            {
+                                g.FillRectangle(brush, x * pixelsPerTile, y * pixelsPerTile, pixelsPerTile, pixelsPerTile);
+                            }
+                            continue;
                         }
                         
-                        // Get static tiles
-                        var statics = map.Tiles.GetStaticTiles(mapX, mapY);
-                        
-                        // Draw the highest static (most visible)
-                        if (statics.Length > 0)
+                        try
                         {
-                            // Sort by Z to get the highest
-                            int highestZ = -1;
-                            int highestID = 0;
+                            // Get land tile
+                            var landTile = map.Tiles.GetLandTile(mapX, mapY);
                             
-                            foreach (var stat in statics)
+                            // Get the actual land tile color
+                            Color landColor = GetLandTileColorFromMul(landTile.ID);
+                            
+                            // Draw land tile
+                            using (Brush brush = new SolidBrush(landColor))
                             {
-                                if (stat.Z >= highestZ)
-                                {
-                                    highestZ = stat.Z;
-                                    highestID = stat.ID;
-                                }
+                                g.FillRectangle(brush, x * pixelsPerTile, y * pixelsPerTile, pixelsPerTile, pixelsPerTile);
                             }
                             
-                            // Get the actual static tile color from UO data
-                            Color staticColor = GetStaticTileColorFromMul(highestID);
+                            // Get static tiles
+                            var statics = map.Tiles.GetStaticTiles(mapX, mapY);
                             
-                            // Draw static tile (smaller to show it's on top of land)
-                            using (Brush staticBrush = new SolidBrush(staticColor))
+                            // Draw the highest static (most visible)
+                            if (statics.Length > 0)
                             {
-                                g.FillRectangle(staticBrush, x * 8 + 1, y * 8 + 1, 6, 6);
+                                // Sort by Z to get the highest
+                                int highestZ = -1;
+                                int highestID = 0;
+                                
+                                foreach (var stat in statics)
+                                {
+                                    if (stat.Z >= highestZ)
+                                    {
+                                        highestZ = stat.Z;
+                                        highestID = stat.ID;
+                                    }
+                                }
+                                
+                                // Get the actual static tile color
+                                Color staticColor = GetStaticTileColorFromMul(highestID);
+                                
+                                // Draw static tile (smaller to show it's on top of land)
+                                if (pixelsPerTile >= 4)
+                                {
+                                    using (Brush staticBrush = new SolidBrush(staticColor))
+                                    {
+                                        int staticSize = Math.Max(1, pixelsPerTile - 2);
+                                        int staticOffset = (pixelsPerTile - staticSize) / 2;
+                                        g.FillRectangle(staticBrush, 
+                                            x * pixelsPerTile + staticOffset, 
+                                            y * pixelsPerTile + staticOffset, 
+                                            staticSize, staticSize);
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Webserver] Error rendering tile at {mapX},{mapY}: {ex.Message}");
+                            // Fill with error color (dark red)
+                            using (Brush brush = new SolidBrush(Color.FromArgb(100, 0, 0)))
+                            {
+                                g.FillRectangle(brush, x * pixelsPerTile, y * pixelsPerTile, pixelsPerTile,
+                                g.FillRectangle(brush, x * pixelsPerTile, y * pixelsPerTile, pixelsPerTile, pixelsPerTile);
                             }
                         }
                     }
                 }
                 
-                // Draw players on the map
-                foreach (var mobile in World.Mobiles.Values)
+                // Draw players on the map (only if zoomed in enough)
+                if (width <= 50 && height <= 50)
                 {
-                    var player = mobile as PlayerMobile;
-                    if (player != null && player.Map == map)
+                    foreach (var mobile in World.Mobiles.Values)
                     {
-                        int px = player.Location.X - startX;
-                        int py = player.Location.Y - startY;
-                        
-                        if (px >= 0 && px < width && py >= 0 && py < height)
+                        var player = mobile as PlayerMobile;
+                        if (player != null && player.Map == map)
                         {
-                            using (Brush brush = new SolidBrush(Color.FromArgb(220, Color.Red)))
-                            {
-                                g.FillEllipse(brush, px * 8, py * 8, 8, 8);
-                            }
+                            int px = player.Location.X - startX;
+                            int py = player.Location.Y - startY;
                             
-                            // Draw player name if zoomed in enough
-                            if (width <= 40)
+                            if (px >= 0 && px < width && py >= 0 && py < height)
                             {
-                                using (Font font = new Font("Arial", 7))
-                                using (Brush textBrush = new SolidBrush(Color.White))
-                                using (Brush shadowBrush = new SolidBrush(Color.Black))
+                                using (Brush brush = new SolidBrush(Color.FromArgb(220, Color.Red)))
                                 {
-                                    // Draw shadow
-                                    g.DrawString(player.Name, font, shadowBrush, px * 8 + 9, py * 8 + 1);
-                                    // Draw text
-                                    g.DrawString(player.Name, font, textBrush, px * 8 + 8, py * 8);
+                                    g.FillEllipse(brush, px * pixelsPerTile, py * pixelsPerTile, pixelsPerTile, pixelsPerTile);
+                                }
+                                
+                                // Draw player name if zoomed in enough
+                                if (width <= 20 && pixelsPerTile >= 8)
+                                {
+                                    using (Font font = new Font("Arial", Math.Max(6, pixelsPerTile - 2)))
+                                    using (Brush textBrush = new SolidBrush(Color.White))
+                                    using (Brush shadowBrush = new SolidBrush(Color.Black))
+                                    {
+                                        // Draw shadow
+                                        g.DrawString(player.Name, font, shadowBrush, px * pixelsPerTile + 1, py * pixelsPerTile + pixelsPerTile + 1);
+                                        // Draw text
+                                        g.DrawString(player.Name, font, textBrush, px * pixelsPerTile, py * pixelsPerTile + pixelsPerTile);
+                                    }
                                 }
                             }
                         }
@@ -399,19 +460,27 @@ namespace Server.Custom
                 }
             }
             
-            // Cache the result
+            // Cache the result (but limit cache size)
             lock (_cacheLock)
             {
                 // Limit cache size to prevent memory issues
-                if (_mapCache[mapIndex].Count > 100)
+                if (_mapCache[mapIndex].Count > 50)
                 {
-                    // Remove a random entry
-                    var keyToRemove = _mapCache[mapIndex].Keys.GetEnumerator();
-                    keyToRemove.MoveNext();
-                    string removeKey = keyToRemove.Current;
+                    // Remove oldest entries
+                    var keysToRemove = new List<string>();
+                    int removeCount = 0;
+                    foreach (var key in _mapCache[mapIndex].Keys)
+                    {
+                        keysToRemove.Add(key);
+                        removeCount++;
+                        if (removeCount >= 10) break;
+                    }
                     
-                    _mapCache[mapIndex][removeKey].Dispose();
-                    _mapCache[mapIndex].Remove(removeKey);
+                    foreach (var key in keysToRemove)
+                    {
+                        _mapCache[mapIndex][key].Dispose();
+                        _mapCache[mapIndex].Remove(key);
+                    }
                 }
                 
                 _mapCache[mapIndex][cacheKey] = bmp;
@@ -426,60 +495,63 @@ namespace Server.Custom
             try
             {
                 // Try to get actual color from UO data if available
-                var landData = TileData.LandTable[tileID];
+                var landData = TileData.LandTable[tileID & 0x3FFF];
                 
                 // Use the tile name to determine a better color
-                string tileName = landData.Name.ToLower();
+                string tileName = landData.Name?.ToLower() ?? "";
                 
-                // Water tiles
-                if (tileName.Contains("water") || (tileID >= 0x00 && tileID <= 0x15))
+                // Water tiles (most common blue issue)
+                if (tileName.Contains("water") || tileName.Contains("sea") || 
+                    (tileID >= 0x00A8 && tileID <= 0x00AB) ||  // Deep water
+                    (tileID >= 0x00A0 && tileID <= 0x00A7) ||  // Medium water
+                    (tileID >= 0x0000 && tileID <= 0x0015))    // Shallow water
+                {
                     return Color.FromArgb(0, 92, 148);
+                }
                 
                 // Sand/desert
                 else if (tileName.Contains("sand") || tileName.Contains("desert") || 
-                        (tileID >= 0x16 && tileID <= 0x3E))
+                        (tileID >= 0x0016 && tileID <= 0x003E))
                     return Color.FromArgb(210, 190, 149);
                 
                 // Grass/plains
-                else if (tileName.Contains("grass") || tileName.Contains("plain") || 
-                        (tileID >= 0x3F && tileID <= 0x6F))
+                else if (tileName.Contains("grass") || tileName.Contains("plain") || tileName.Contains("field") ||
+                        (tileID >= 0x003F && tileID <= 0x006F))
                     return Color.FromArgb(86, 153, 86);
                 
                 // Mountains/rocks
-                else if (tileName.Contains("mountain") || tileName.Contains("rock") || 
-                        (tileID >= 0x70 && tileID <= 0x9F))
+                else if (tileName.Contains("mountain") || tileName.Contains("rock") || tileName.Contains("stone") ||
+                        (tileID >= 0x0070 && tileID <= 0x009F))
                     return Color.FromArgb(144, 144, 144);
                 
                 // Snow
-                else if (tileName.Contains("snow") || (tileID >= 0xA0 && tileID <= 0xC5))
+                else if (tileName.Contains("snow") || (tileID >= 0x0385 && tileID <= 0x03AC))
                     return Color.FromArgb(224, 224, 224);
                 
                 // Swamp
-                else if (tileName.Contains("swamp"))
+                else if (tileName.Contains("swamp") || tileName.Contains("bog"))
                     return Color.FromArgb(96, 116, 77);
                 
                 // Lava
-                else if (tileName.Contains("lava"))
+                else if (tileName.Contains("lava") || tileName.Contains("magma"))
                     return Color.FromArgb(200, 90, 40);
                 
-                // Default - use a color based on tile ID
-                return GetDefaultColorForTileID(tileID);
+                // Dirt/earth
+                else if (tileName.Contains("dirt") || tileName.Contains("earth"))
+                    return Color.FromArgb(139, 90, 43);
+                
+                // Cave floor
+                else if (tileName.Contains("cave") || tileName.Contains("dungeon"))
+                    return Color.FromArgb(80, 80, 80);
+                
+                // Default - use a more varied color based on tile ID
+                return GetVariedColorForTileID(tileID);
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"[Webserver] Error getting land tile color for ID {tileID}: {ex.Message}");
                 // Fallback colors if we can't access the MUL data
-                if (tileID >= 0x00 && tileID <= 0x15)
-                    return Color.DarkBlue;
-                else if (tileID >= 0x16 && tileID <= 0x3E)
-                    return Color.SandyBrown;
-                else if (tileID >= 0x3F && tileID <= 0x6F)
-                    return Color.ForestGreen;
-                else if (tileID >= 0x70 && tileID <= 0x9F)
-                    return Color.Gray;
-                else if (tileID >= 0xA0 && tileID <= 0xC5)
-                    return Color.White;
-                else
-                    return Color.DarkGreen;
+                return GetFallbackLandColor(tileID);
             }
         }
 
@@ -488,57 +560,124 @@ namespace Server.Custom
         {
             try
             {
-                // Try to get actual color from UO data if available
+                // Ensure valid tile ID
+                if (tileID < 0 || tileID >= TileData.ItemTable.Length)
+                    return Color.FromArgb(120, 70, 20);
+                
                 var staticData = TileData.ItemTable[tileID];
                 
                 // Use the tile name to determine a better color
-                string tileName = staticData.Name.ToLower();
+                string tileName = staticData.Name?.ToLower() ?? "";
                 
                 // Trees and plants
                 if (tileName.Contains("tree") || tileName.Contains("plant") || 
-                    tileName.Contains("bush") || tileName.Contains("foliage"))
-                    return Color.FromArgb(0, 100, 0);
+                    tileName.Contains("bush") || tileName.Contains("foliage") ||
+                    tileName.Contains("flower") || tileName.Contains("vine"))
+                    return Color.FromArgb(0, 120, 0);
                 
                 // Buildings and structures
                 else if (tileName.Contains("wall") || tileName.Contains("door") || 
-                        tileName.Contains("roof") || tileName.Contains("floor"))
+                        tileName.Contains("roof") || tileName.Contains("floor") ||
+                        tileName.Contains("house") || tileName.Contains("building"))
                     return Color.FromArgb(139, 69, 19);
                 
-                // Roads
-                else if (tileName.Contains("road") || tileName.Contains("path"))
+                // Roads and paths
+                else if (tileName.Contains("road") || tileName.Contains("path") ||
+                        tileName.Contains("cobble") || tileName.Contains("brick"))
                     return Color.FromArgb(160, 160, 160);
                 
                 // Water features
-                else if (tileName.Contains("water") || tileName.Contains("sea"))
+                else if (tileName.Contains("water") || tileName.Contains("sea") ||
+                        tileName.Contains("fountain") || tileName.Contains("well"))
                     return Color.FromArgb(0, 92, 148);
                 
-                // Default - use a color based on tile ID
-                return GetDefaultColorForTileID(tileID);
+                // Furniture
+                else if (tileName.Contains("chair") || tileName.Contains("table") ||
+                        tileName.Contains("bed") || tileName.Contains("chest"))
+                    return Color.FromArgb(101, 67, 33);
+                
+                // Rocks and stones
+                else if (tileName.Contains("rock") || tileName.Contains("stone") ||
+                        tileName.Contains("boulder") || tileName.Contains("crystal"))
+                    return Color.FromArgb(128, 128, 128);
+                
+                // Metal objects
+                else if (tileName.Contains("iron") || tileName.Contains("metal") ||
+                        tileName.Contains("anvil") || tileName.Contains("forge"))
+                    return Color.FromArgb(169, 169, 169);
+                
+                // Default - use a varied color based on tile ID
+                return GetVariedColorForTileID(tileID);
             }
-            catch
+            catch (Exception ex)
             {
-                // Fallback colors if we can't access the MUL data
-                if ((tileID >= 0x0C8E && tileID <= 0x0CC7) || (tileID >= 0x0CE0 && tileID <= 0x0D29))
-                    return Color.FromArgb(0, 100, 0);
-                else if ((tileID >= 0x0064 && tileID <= 0x0900))
-                    return Color.FromArgb(139, 69, 19);
-                else if (tileID >= 0x071D && tileID <= 0x07A0)
-                    return Color.FromArgb(160, 160, 160);
-                else
-                    return Color.FromArgb(120, 70, 20);
+                Console.WriteLine($"[Webserver] Error getting static tile color for ID {tileID}: {ex.Message}");
+                return GetFallbackStaticColor(tileID);
             }
         }
 
-        // Generate a color based on tile ID for consistent coloring
-        private static Color GetDefaultColorForTileID(int tileID)
+        // Generate a more varied color based on tile ID for better visual distinction
+        private static Color GetVariedColorForTileID(int tileID)
         {
-            // Use the tile ID to generate a consistent color
-            int r = (tileID * 7) % 200 + 55; // Range 55-254
-            int g = (tileID * 13) % 200 + 55;
-            int b = (tileID * 17) % 200 + 55;
+            // Use the tile ID to generate a consistent but varied color
+            Random rand = new Random(tileID);
             
-            return Color.FromArgb(r, g, b);
+            // Generate colors in different ranges based on tile ID ranges
+            if (tileID < 1000)
+            {
+                // Earthy tones for low IDs
+                int r = rand.Next(80, 160);
+                int g = rand.Next(60, 140);
+                int b = rand.Next(40, 100);
+                return Color.FromArgb(r, g, b);
+            }
+            else if (tileID < 5000)
+            {
+                // Green tones for mid IDs
+                int r = rand.Next(40, 120);
+                int g = rand.Next(80, 180);
+                int b = rand.Next(40, 120);
+                return Color.FromArgb(r, g, b);
+            }
+            else
+            {
+                // Varied tones for high IDs
+                int r = rand.Next(60, 200);
+                int g = rand.Next(60, 200);
+                int b = rand.Next(60, 200);
+                return Color.FromArgb(r, g, b);
+            }
         }
+
+        // Fallback colors when MUL data is not accessible
+        private static Color GetFallbackLandColor(int tileID)
+        {
+            if (tileID >= 0x00 && tileID <= 0x15)
+                return Color.FromArgb(0, 92, 148); // Water
+            else if (tileID >= 0x16 && tileID <= 0x3E)
+                return Color.FromArgb(210, 190, 149); // Sand
+            else if (tileID >= 0x3F && tileID <= 0x6F)
+                return Color.FromArgb(86, 153, 86); // Grass
+            else if (tileID >= 0x70 && tileID <= 0x9F)
+                return Color.FromArgb(144, 144, 144); // Rock
+            else if (tileID >= 0xA0 && tileID <= 0xC5)
+                return Color.FromArgb(224, 224, 224); // Snow
+            else
+                return Color.FromArgb(139, 90, 43); // Default dirt
+        }
+
+        private static Color GetFallbackStaticColor(int tileID)
+        {
+            if ((tileID >= 0x0C8E && tileID <= 0x0CC7) || (tileID >= 0x0CE0 && tileID <= 0x0D29))
+                return Color.FromArgb(0, 120, 0); // Trees
+            else if ((tileID >= 0x0064 && tileID <= 0x0900))
+                return Color.FromArgb(139, 69, 19); // Buildings
+            else if (tileID >= 0x071D && tileID <= 0x07A0)
+                return Color.FromArgb(160, 160, 160); // Roads
+            else
+                return Color.FromArgb(120, 70, 20); // Default
+        }
+
         private static async Task HandleWebSocket(WebSocket ws)
         {
             var buffer = new byte[1024];
@@ -620,16 +759,6 @@ namespace Server.Custom
             }
         }
 
-        // Advanced method to render map using actual UO art assets
-        private static Bitmap RenderMapWithUOArt(int mapIndex, int startX, int startY, int width, int height)
-        {
-            // This would be a more advanced implementation that uses actual UO art assets
-            // from the client files to render a more accurate representation of the map.
-            // It would require access to the art.mul, texmaps.mul, etc. files.
-            
-            // For now, we'll use our simpler implementation
-            return GetMapSectionFromMul(mapIndex, startX, startY, width, height);
-        }
         private static string GetHtmlPage(int port)
         {
              return $@"
@@ -642,7 +771,8 @@ namespace Server.Custom
 <style>
   body {{
     font-family: Arial, sans-serif;
-    margin: 0;
+    margin
+: 0;
     padding: 0;
     overflow: hidden;
     height: 100vh;
@@ -767,6 +897,20 @@ namespace Server.Custom
     color: white;
     border: 1px solid #555;
   }}
+  
+  #debugInfo {{
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 12px;
+    z-index: 10;
+    max-width: 300px;
+  }}
 </style>
 </head>
 <body>
@@ -781,6 +925,7 @@ namespace Server.Custom
       <option value='4'>Tokuno</option>
     </select>
     <button id='resetView'>Reset View</button>
+    <button id='toggleDebug'>Debug</button>
   </div>
 </div>
 
@@ -792,6 +937,13 @@ namespace Server.Custom
     X: <span id='viewX'>0</span>, Y: <span id='viewY'>0</span>, 
     Zoom: <span id='zoomLevel'>1.0</span>x, 
     Map: <span id='viewMap'>Felucca</span>
+  </div>
+  
+  <div id='debugInfo' style='display: none;'>
+    <div>Tiles: <span id='debugTiles'>0x0</span></div>
+    <div>Pixels: <span id='debugPixels'>0x0</span></div>
+    <div>Request: <span id='debugRequest'>none</span></div>
+    <div>Cache: <span id='debugCache'>0</span> entries</div>
   </div>
   
   <div class='location-buttons'>
@@ -815,6 +967,13 @@ namespace Server.Custom
   const viewMap = document.getElementById('viewMap');
   const loading = document.getElementById('loading');
   const mapSelect = document.getElementById('mapSelect');
+  const debugInfo = document.getElementById('debugInfo');
+  
+  // Debug elements
+  const debugTiles = document.getElementById('debugTiles');
+  const debugPixels = document.getElementById('debugPixels');
+  const debugRequest = document.getElementById('debugRequest');
+  const debugCache = document.getElementById('debugCache');
   
   // Map names for display
   const mapNames = ['Felucca', 'Trammel', 'Ilshenar', 'Malas', 'Tokuno'];
@@ -866,7 +1025,9 @@ namespace Server.Custom
     lastMouseX: 0,
     lastMouseY: 0,
     players: [],
-    pendingRequest: false
+    pendingRequest: false,
+    debugMode: false,
+    requestCount: 0
   }};
   
   // Calculate viewport dimensions based on container size and zoom
@@ -876,8 +1037,9 @@ namespace Server.Custom
     
     const effectiveTileSize = state.tileSize * state.zoom;
     
-    const tilesWide = Math.ceil(containerWidth / effectiveTileSize);
-    const tilesHigh = Math.ceil(containerHeight / effectiveTileSize);
+    // Calculate how many tiles we need to fill the screen
+    const tilesWide = Math.ceil(containerWidth / effectiveTileSize) + 2; // Add buffer
+    const tilesHigh = Math.ceil(containerHeight / effectiveTileSize) + 2; // Add buffer
     
     const startX = Math.floor(state.centerX - tilesWide / 2);
     const startY = Math.floor(state.centerY - tilesHigh / 2);
@@ -891,6 +1053,16 @@ namespace Server.Custom
     }};
   }}
   
+  // Update debug information
+  function updateDebugInfo(viewport, requestX, requestY, requestWidth, requestHeight) {{
+    if (state.debugMode) {{
+      debugTiles.textContent = `${{viewport.width}}x${{viewport.height}}`;
+      debugPixels.textContent = `${{viewport.width * viewport.effectiveTileSize}}x${{viewport.height * viewport.effectiveTileSize}}`;
+      debugRequest.textContent = `${{requestX}},${{requestY}} (${{requestWidth}}x${{requestHeight}})`;
+      debugCache.textContent = state.requestCount;
+    }}
+  }}
+  
   // Update the map display
   function updateMap() {{
     if (state.pendingRequest) {{
@@ -899,19 +1071,23 @@ namespace Server.Custom
     
     loading.style.display = 'block';
     state.pendingRequest = true;
+    state.requestCount++;
     
     const viewport = getViewport();
     const currentBounds = mapBounds[state.mapIndex];
     
-    // Ensure center point is within map bounds
-    state.centerX = Math.max(0, Math.min(currentBounds.width, state.centerX));
-    state.centerY = Math.max(0, Math.min(currentBounds.height, state.centerY));
+    // Ensure center point is within reasonable bounds (allow some out-of-bounds for ocean view)
+    state.centerX = Math.max(-500, Math.min(currentBounds.width + 500, state.centerX));
+    state.centerY = Math.max(-500, Math.min(currentBounds.height + 500, state.centerY));
     
     // Calculate map section to request
-    const requestX = Math.max(0, viewport.startX);
-    const requestY = Math.max(0, viewport.startY);
-    const requestWidth = Math.min(viewport.width, currentBounds.width - requestX);
-    const requestHeight = Math.min(viewport.height, currentBounds.height - requestY);
+    const requestX = viewport.startX;
+    const requestY = viewport.startY;
+    const requestWidth = Math.min(200, Math.max(1, viewport.width)); // Limit max size
+    const requestHeight = Math.min(150, Math.max(1, viewport.height)); // Limit max size
+    
+    // Update debug info
+    updateDebugInfo(viewport, requestX, requestY, requestWidth, requestHeight);
     
     // Create a new image to prevent flickering
     const newImg = new Image();
@@ -942,14 +1118,17 @@ namespace Server.Custom
       state.pendingRequest = false;
       
       // Try with smaller dimensions if we failed
-      if (requestWidth > 50 || requestHeight > 50) {{
+      if (requestWidth > 20 || requestHeight > 20) {{
+        console.log('Retrying with smaller request size...');
         state.zoom = Math.max(0.5, state.zoom * 0.8);
-        setTimeout(updateMap, 500); // Retry after a delay
+        setTimeout(updateMap, 1000); // Retry after a delay
       }}
     }};
     
     // Set the source to request the map
-    newImg.src = `/map?x=${{requestX}}&y=${{requestY}}&width=${{requestWidth}}&height=${{requestHeight}}&map=${{state.mapIndex}}&t=${{Date.now()}}`;
+    const requestUrl = `/map?x=${{requestX}}&y=${{requestY}}&width=${{requestWidth}}&height=${{requestHeight}}&map=${{state.mapIndex}}&t=${{Date.now()}}`;
+    console.log('Requesting map:', requestUrl);
+    newImg.src = requestUrl;
     
     // Update coordinate display
     viewX.textContent = Math.floor(state.centerX);
@@ -976,14 +1155,14 @@ namespace Server.Custom
         const screenY = (p.Y - viewport.startY) * viewport.effectiveTileSize;
         
         // Check if player is visible in the current view
-        if (screenX >= 0 && screenX <= mapContainer.clientWidth &&
-            screenY >= 0 && screenY <= mapContainer.clientHeight) {{
+        if (screenX >= -20 && screenX <= mapContainer.clientWidth + 20 &&
+            screenY >= -20 && screenY <= mapContainer.clientHeight + 20) {{
           
           const marker = document.createElement('div');
           marker.className = 'player-marker';
           marker.style.left = screenX + 'px';
           marker.style.top = screenY + 'px';
-          marker.title = p.Name;
+          marker.title = `${{p.Name}} (${{p.X}}, ${{p.Y}})`;
           mapContainer.appendChild(marker);
         }}
       }}
@@ -996,7 +1175,8 @@ namespace Server.Custom
     
     // Reset to center of map
     const currentBounds = mapBounds[state.mapIndex];
-    state.centerX = Math.floor(currentBounds.width / 2);
+    state.centerX = Math.floor
+(currentBounds.width / 2);
     state.centerY = Math.floor(currentBounds.height / 2);
     
     updateMap();
@@ -1011,6 +1191,12 @@ namespace Server.Custom
     updateMap();
   }});
   
+  // Toggle debug button
+  document.getElementById('toggleDebug').addEventListener('click', () => {{
+    state.debugMode = !state.debugMode;
+    debugInfo.style.display = state.debugMode ? 'block' : 'none';
+  }});
+  
   // Zoom controls
   document.getElementById('zoomIn').addEventListener('click', () => {{
     state.zoom = Math.min(4.0, state.zoom * 1.5);
@@ -1018,7 +1204,7 @@ namespace Server.Custom
   }});
   
   document.getElementById('zoomOut').addEventListener('click', () => {{
-    state.zoom = Math.max(0.2, state.zoom / 1.5);
+    state.zoom = Math.max(0.1, state.zoom / 1.5);
     updateMap();
   }});
   
@@ -1068,20 +1254,22 @@ namespace Server.Custom
     const mapY = viewport.startY + mouseY / viewport.effectiveTileSize;
     
     // Adjust zoom level
-    if (e.deltaY < 0) {{
-      // Zoom in
-      state.zoom = Math.min(4.0, state.zoom * 1.1);
-    }} else {{
-      // Zoom out
-      state.zoom = Math.max(0.2, state.zoom / 1.1);
+    const zoomFactor = e.deltaY < 0 ? 1.2 : 1/1.2;
+    const oldZoom = state.zoom;
+    state.zoom = Math.max(0.1, Math.min(4.0, state.zoom * zoomFactor));
+    
+    // Only adjust center if zoom actually changed
+    if (state.zoom !== oldZoom) {{
+      // Calculate new viewport
+      const newViewport = getViewport();
+      
+      // Adjust center to keep mouse position over same map point
+      const newMouseTileX = mouseX / newViewport.effectiveTileSize;
+      const newMouseTileY = mouseY / newViewport.effectiveTileSize;
+      
+      state.centerX = mapX - newMouseTileX + newViewport.width / 2;
+      state.centerY = mapY - newMouseTileY + newViewport.height / 2;
     }}
-    
-    // Calculate new viewport
-    const newViewport = getViewport();
-    
-    // Adjust center to keep mouse position over same map point
-    state.centerX = mapX - (mouseX / newViewport.effectiveTileSize - viewport.startX);
-    state.centerY = mapY - (mouseY / newViewport.effectiveTileSize - viewport.startY);
     
     updateMap();
   }});
@@ -1150,6 +1338,17 @@ namespace Server.Custom
   ws.onmessage = function(event) {{
     state.players = JSON.parse(event.data);
     updatePlayerMarkers();
+  }};
+  
+  ws.onerror = function(error) {{
+    console.log('WebSocket error:', error);
+  }};
+  
+  ws.onclose = function() {{
+    console.log('WebSocket connection closed. Attempting to reconnect...');
+    setTimeout(() => {{
+      location.reload(); // Simple reconnect by reloading the page
+    }}, 5000);
   }};
   
   // Handle window resize
@@ -1227,12 +1426,15 @@ namespace Server.Custom
         
         // Adjust zoom level
         const oldZoom = state.zoom;
-        state.zoom = Math.max(0.2, Math.min(4.0, oldZoom * zoomFactor));
+        state.zoom = Math.max(0.1, Math.min(4.0, oldZoom * zoomFactor));
         
         // Adjust center to keep touch center over same map point
         const newViewport = getViewport();
-        state.centerX = mapX - (mouseX / newViewport.effectiveTileSize - viewport.startX);
-        state.centerY = mapY - (mouseY / newViewport.effectiveTileSize - viewport.startY);
+        const newMouseTileX = mouseX / newViewport.effectiveTileSize;
+        const newMouseTileY = mouseY / newViewport.effectiveTileSize;
+        
+        state.centerX = mapX - newMouseTileX + newViewport.width / 2;
+        state.centerY = mapY - newMouseTileY + newViewport.height / 2;
         
         initialPinchDistance = pinchDistance;
         updateMap();
@@ -1249,9 +1451,6 @@ namespace Server.Custom
   mapContainer.addEventListener('contextmenu', (e) => {{
     e.preventDefault();
   }});
-  
-  // Initialize the map
-  updateMap();
   
   // Add keyboard navigation
   window.addEventListener('keydown', (e) => {{
@@ -1279,12 +1478,13 @@ namespace Server.Custom
         e.preventDefault();
         break;
       case '+':
+      case '=':
         state.zoom = Math.min(4.0, state.zoom * 1.2);
         updateMap();
         e.preventDefault();
         break;
       case '-':
-        state.zoom = Math.max(0.2, state.zoom / 1.2);
+        state.zoom = Math.max(0.1, state.zoom / 1.2);
         updateMap();
         e.preventDefault();
         break;
@@ -1292,17 +1492,27 @@ namespace Server.Custom
         const currentBounds = mapBounds[state.mapIndex];
         state.centerX = Math.floor(currentBounds.width / 2);
         state.centerY = Math.floor(currentBounds.height / 2);
+        state.zoom = 1.0;
         updateMap();
+        e.preventDefault();
+        break;
+      case 'd':
+      case 'D':
+        // Toggle debug mode with 'd' key
+        state.debugMode = !state.debugMode;
+        debugInfo.style.display = state.debugMode ? 'block' : 'none';
         e.preventDefault();
         break;
     }}
   }});
+  
+  // Initialize the map
+  console.log('Initializing map...');
+  updateMap();
 </script>
 </body>
 </html>
 ";
-}
-
-  
+        }
     }
 }
