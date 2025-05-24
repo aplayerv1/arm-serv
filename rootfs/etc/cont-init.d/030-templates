@@ -13,9 +13,10 @@ dos2unix /opt/files/config/*
 
 ACCOUNT_FILE="/opt/ServUO/Saves/Accounts/accounts.xml"
 ACCOUNT_DIR="/opt/ServUO/Saves/Accounts"
-
+OTHER_DIR="/opt/ServUO/Scripts/Custom"
 if [ ! -f "$ACCOUNT_FILE" ]; then
     mkdir -p "$ACCOUNT_DIR"
+    mkdir -p "$OTHER_DIR"
     chmod 755 "$ACCOUNT_DIR"
 
     perl /opt/scripts/mm.pl /opt/files/config/ --verbose

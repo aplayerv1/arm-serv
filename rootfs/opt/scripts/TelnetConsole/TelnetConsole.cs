@@ -116,6 +116,82 @@ namespace Server.Custom
                 catch { /* ignore cleanup errors */ }
             }
         }
+        private static void CreateGameAccount(TelnetSession session, string username, string password, AccessLevel accessLevel)
+        {
+            try
+            {
+                // Check if account already exists
+                if (Accounts.GetAccount(username) != null)
+                {
+                    session.Writer.WriteLine($"Account '{username}' already exists.");
+                    return;
+                }
+
+                // Create new account
+                Account newAccount = new Account(username, password);
+                newAccount.AccessLevel = accessLevel;
+                
+                // Add to accounts system
+                Accounts.Add(newAccount);
+                
+                session.Writer.WriteLine($"Account '{username}' created successfully with access level: {accessLevel}");
+                LogMessage($"Account created: {username} ({accessLevel}) by {session.Username}");
+                
+                Console.WriteLine($"[TelnetConsole] Account '{username}' created by {session.Username}");
+            }
+            catch (Exception ex)
+            {
+                session.Writer.WriteLine($"Error creating account: {ex.Message}");
+                Console.WriteLine($"[TelnetConsole] Account creation error: {ex.Message}");
+            }
+        }
+
+        private static void ListGameAccounts(TelnetSession session)
+        {
+            try
+            {
+                var accounts = Accounts.GetAccounts().Cast<Account>().ToList();
+                
+                session.Writer.WriteLine($"=== Game Accounts ({accounts.Count}) ===");
+                
+                foreach (var account in accounts.OrderBy(a => a.Username))
+                {
+                    string status = account.Banned ? " [BANNED]" : "";
+                    string access = account.AccessLevel > AccessLevel.Player ? $" [{account.AccessLevel}]" : "";
+                    session.Writer.WriteLine($"{account.Username}{access}{status}");
+                }
+                
+                session.Writer.WriteLine();
+            }
+            catch (Exception ex)
+            {
+                session.Writer.WriteLine($"Error listing accounts: {ex.Message}");
+            }
+        }
+
+        private static void SetAccountAccess(TelnetSession session, string username, AccessLevel accessLevel)
+        {
+            try
+            {
+                Account account = Accounts.GetAccount(username) as Account;
+                
+                if (account == null)
+                {
+                    session.Writer.WriteLine($"Account '{username}' not found.");
+                    return;
+                }
+                
+                account.AccessLevel = accessLevel;
+                session.Writer.WriteLine($"Set '{username}' access level to: {accessLevel}");
+                LogMessage($"Access level changed: {username} -> {accessLevel} by {session.Username}");
+                
+                Console.WriteLine($"[TelnetConsole] Access level for '{username}' set to {accessLevel}");
+            }
+            catch (Exception ex)
+            {
+                session.Writer.WriteLine($"Error setting access level: {ex.Message}");
+            }
+        }
 
         public static void Initialize()
         {
@@ -428,6 +504,50 @@ namespace Server.Custom
                             }
                             break;
 
+                        // ADD THE NEW CASES HERE:
+                        case "createaccount":
+                            if (parts.Length >= 3)
+                            {
+                                string username = parts[1];
+                                string password = parts[2];
+                                AccessLevel level = AccessLevel.Player;
+                                
+                                if (parts.Length > 3 && Enum.TryParse<AccessLevel>(parts[3], true, out AccessLevel parsedLevel))
+                                {
+                                    level = parsedLevel;
+                                }
+                                
+                                CreateGameAccount(session, username, password, level);
+                            }
+                            else
+                            {
+                                session.Writer.WriteLine("Usage: createaccount <username> <password> [accesslevel]");
+                            }
+                            break;
+
+                        case "listaccounts":
+                            ListGameAccounts(session);
+                            break;
+
+                        case "setaccess":
+                            if (parts.Length >= 3)
+                            {
+                                string username = parts[1];
+                                if (Enum.TryParse<AccessLevel>(parts[2], true, out AccessLevel level))
+                                {
+                                    SetAccountAccess(session, username, level);
+                                }
+                                else
+                                {
+                                    session.Writer.WriteLine("Invalid access level. Use: Player, Counselor, GameMaster, Seer, Administrator, Owner");
+                                }
+                            }
+                            else
+                            {
+                                session.Writer.WriteLine("Usage: setaccess <username> <accesslevel>");
+                            }
+                            break;
+
                         default:
                             // Execute as ServUO command
                             ExecuteServUOCommand(session, line);
@@ -441,6 +561,7 @@ namespace Server.Custom
                 }
             }
         }
+
 
         private static void ExecuteServUOCommand(TelnetSession session, string commandText)
         {
@@ -521,6 +642,9 @@ namespace Server.Custom
             session.Writer.WriteLine("who           - Show online players");
             session.Writer.WriteLine("sessions      - Show active telnet sessions");
             session.Writer.WriteLine("broadcast <msg> - Broadcast message to all players");
+            session.Writer.WriteLine("createaccount <user> <pass> [level] - Create game account");
+            session.Writer.WriteLine("listaccounts  - List all game accounts");
+            session.Writer.WriteLine("setaccess <user> <level> - Set account access level");
             session.Writer.WriteLine("exit/quit     - Disconnect");
             session.Writer.WriteLine();
             session.Writer.WriteLine("=== ServUO Commands ===");
@@ -532,6 +656,7 @@ namespace Server.Custom
             session.Writer.WriteLine("  go britain");
             session.Writer.WriteLine();
         }
+
 
         private static void ShowStatus(TelnetSession session)
         {
