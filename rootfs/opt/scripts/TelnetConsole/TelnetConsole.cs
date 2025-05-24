@@ -473,6 +473,7 @@ namespace Server.Custom
             // Try to find existing admin with sufficient access level
             Mobile admin = World.Mobiles.Values.FirstOrDefault(m => m.AccessLevel >= session.AccessLevel);
 
+            // If no suitable admin found or we don't
             // If no suitable admin found or we don't have a session-specific fake admin, create one
             if (admin == null || session.FakeAdmin == null)
             {
@@ -482,7 +483,6 @@ namespace Server.Custom
 
             return admin;
         }
-
 
         private static void ShowHelp(TelnetSession session)
         {
