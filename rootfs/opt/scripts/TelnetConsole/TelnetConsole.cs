@@ -471,16 +471,46 @@ namespace Server.Custom
 
         private static Mobile GetOrCreateAdmin(TelnetSession session)
         {
-            Mobile admin = World.Mobiles.Values.FirstOrDefault(m => m.AccessLevel >= session.AccessLevel);
+            // Try
+            // Try to find existing admin with sufficient access level
+            Mobile admin = World.Mobiles.Values.FirstOrDefault(m => m.AccessLevel >= session.AccessLevel && !m.Deleted);
 
-            // If no suitable admin found or we don't have a session-specific fake admin, create one
-            if (admin == null || session.FakeAdmin == null)
+            // If we found an existing admin, use it
+            if (admin != null)
             {
-                session.FakeAdmin = CreateFakeAdmin(session);
-                admin = session.FakeAdmin;
+                return admin;
             }
 
-            return admin;
+            // If no suitable admin found, try to create one without account restrictions
+            if (session.FakeAdmin == null || session.FakeAdmin.Deleted)
+            {
+                session.FakeAdmin = CreateFakeAdminWithoutAccount(session);
+            }
+
+            return session.FakeAdmin;
+        }
+
+        private static Mobile CreateFakeAdminWithoutAccount(TelnetSession session)
+        {
+            // Create a temporary admin without creating an account
+            PlayerMobile fake = new PlayerMobile
+            {
+                Name = $"TelnetAdmin_{session.SessionId}",
+                AccessLevel = session.AccessLevel,
+                Hidden = true,
+                Body = 400,
+                Hue = 0,
+                Female = false,
+                Blessed = true,
+                CantWalk = true,
+                Account = null // No account needed for command execution
+            };
+
+            World.AddMobile(fake);
+            fake.MoveToWorld(new Point3D(0, 0, 0), Map.Felucca);
+
+            Console.WriteLine($"[TelnetConsole] Created temporary admin for session {session.SessionId}");
+            return fake;
         }
 
         private static void ShowHelp(TelnetSession session)
@@ -609,54 +639,6 @@ namespace Server.Custom
 
             session.Writer.WriteLine($"Broadcast sent: {message}");
             LogMessage($"Broadcast: {session.Username}: {message}");
-        }
-
-        private static Mobile CreateFakeAdmin(TelnetSession session)
-        {
-            string username = $"TelnetAdmin_{session.SessionId}";
-            string password = Guid.NewGuid().ToString("N").Substring(0, 12);
-
-            Account account = Accounts.GetAccount(username) as Account;
-
-            if (account == null)
-            {
-                account = new Account(username, password);
-                account.AccessLevel = session.AccessLevel;
-                Accounts.Add(account);
-            }
-            else
-            {
-                account.AccessLevel = session.AccessLevel;
-            }
-
-            PlayerMobile fake = new PlayerMobile
-            {
-                Name = $"TelnetAdmin_{session.SessionId}",
-                AccessLevel = session.AccessLevel,
-                Hidden = true,
-                Body = 400,
-                Hue = 0,
-                Female = false,
-                Blessed = true,
-                CantWalk = true,
-                Account = account
-            };
-
-            // Assign the mobile to the first available slot
-            for (int i = 0; i < account.Length; i++)
-            {
-                if (account[i] == null)
-                {
-                    account[i] = fake;
-                    break;
-                }
-            }
-
-            World.AddMobile(fake);
-            fake.MoveToWorld(new Point3D(0, 0, 0), Map.Felucca);
-
-            Console.WriteLine($"[TelnetConsole] Created fake admin for session {session.SessionId}");
-            return fake;
         }
 
         private static void CleanupSessions()
