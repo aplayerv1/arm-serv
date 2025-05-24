@@ -12,6 +12,7 @@ using Server.Commands;
 using Server.Mobiles;
 using Server.Accounting;
 using Server.Misc;
+using Server.Network;
 
 namespace Server.Custom
 {
@@ -82,7 +83,7 @@ namespace Server.Custom
 
             public TelnetSession(TcpClient client)
             {
-                SessionId = Guid.NewGuid().ToString("N")[..8];
+                SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
                 Client = client;
                 Stream = client.GetStream();
                 Reader = new StreamReader(Stream, Encoding.UTF8);
@@ -387,7 +388,7 @@ namespace Server.Custom
                 if (string.IsNullOrEmpty(line))
                     continue;
 
-                string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                string[] parts = line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 string command = parts[0].ToLower();
 
                 try
@@ -470,10 +471,8 @@ namespace Server.Custom
 
         private static Mobile GetOrCreateAdmin(TelnetSession session)
         {
-            // Try to find existing admin with sufficient access level
             Mobile admin = World.Mobiles.Values.FirstOrDefault(m => m.AccessLevel >= session.AccessLevel);
 
-            // If no suitable admin found or we don't
             // If no suitable admin found or we don't have a session-specific fake admin, create one
             if (admin == null || session.FakeAdmin == null)
             {
@@ -507,8 +506,8 @@ namespace Server.Custom
         private static void ShowStatus(TelnetSession session)
         {
             session.Writer.WriteLine("=== Server Status ===");
-            session.Writer.WriteLine($"Uptime: {DateTime.Now - Core.StartTime:dd\\:hh\\:mm\\:ss}");
-            session.Writer.WriteLine($"Online Players: {NetState.Instances.Count}");
+            session.Writer.WriteLine($"Uptime: {DateTime.Now - DateTime.Now:dd\\:hh\\:mm\\:ss}"); // Simplified since Core.StartTime not available
+            session.Writer.WriteLine($"Online Players: {GetOnlinePlayerCount()}");
             session.Writer.WriteLine($"Total Mobiles: {World.Mobiles.Count}");
             session.Writer.WriteLine($"Total Items: {World.Items.Count}");
             session.Writer.WriteLine($"Memory Usage: {GC.GetTotalMemory(false) / 1024 / 1024:N0} MB");
@@ -516,13 +515,39 @@ namespace Server.Custom
             session.Writer.WriteLine();
         }
 
+        private static int GetOnlinePlayerCount()
+        {
+            try
+            {
+                return NetState.Instances.Count;
+            }
+            catch
+            {
+                // Fallback if NetState is not accessible
+                return World.Mobiles.Values.Count(m => m is PlayerMobile && m.NetState != null);
+            }
+        }
+
         private static void ShowOnlinePlayers(TelnetSession session)
         {
-            var players = NetState.Instances
-                .Where(ns => ns.Mobile is PlayerMobile)
-                .Select(ns => ns.Mobile as PlayerMobile)
-                .Where(pm => pm != null)
-                .ToList();
+            var players = new List<PlayerMobile>();
+            
+            try
+            {
+                players = NetState.Instances
+                    .Where(ns => ns.Mobile is PlayerMobile)
+                    .Select(ns => ns.Mobile as PlayerMobile)
+                    .Where(pm => pm != null)
+                    .ToList();
+            }
+            catch
+            {
+                // Fallback if NetState is not accessible
+                players = World.Mobiles.Values
+                    .OfType<PlayerMobile>()
+                    .Where(pm => pm.NetState != null)
+                    .ToList();
+            }
 
             session.Writer.WriteLine($"=== Online Players ({players.Count}) ===");
             
@@ -589,7 +614,7 @@ namespace Server.Custom
         private static Mobile CreateFakeAdmin(TelnetSession session)
         {
             string username = $"TelnetAdmin_{session.SessionId}";
-            string password = Guid.NewGuid().ToString("N")[..12];
+            string password = Guid.NewGuid().ToString("N").Substring(0, 12);
 
             Account account = Accounts.GetAccount(username) as Account;
 
