@@ -444,7 +444,83 @@ desktop.ini
 # Docker
 .dockerignore
 ```
+## 🌐 Additional Features
 
-Create a CONTRIBUTING.md file:
+### Telnet Console Access
 
-```markdown:CONTRIBUTING.md
+The container includes telnet console support for remote server administration.
+
+**Usage:**
+```bash
+telnet your-server-ip 6003:6003
+```
+
+### Web Server Map Interface
+
+Built-in web-based map viewer for real-time server monitoring and player tracking.
+
+
+**Access the Web Map:**
+- URL: `http://your-server-ip:3344/map`
+- Features:
+  - Real-time player positions
+  - Interactive world map
+
+
+**Complete Configuration Example:**
+```yaml
+version: '3.8'
+services:
+  servuo:
+    image: aplayerv1/arm-serv:latest
+    container_name: servuo-server
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Paris
+      - ADMIN_NAME=youradmin
+      - ADMIN_PASSWORD=yourpassword
+    ports:
+      - "2593:2593"  # Game server
+      - "6003:6003"  # Telnet console
+      - "3344:3344"  # Web map
+      - "3345:3345"  # Web map (SSL)
+    volumes:
+      - ./servuo:/opt/ServUO
+      - ./data:/opt/data
+```
+
+
+**Web Map Features:**
+- 📍 Real-time player tracking
+- 🗺️ Interactive zoom and pan
+
+## ⚠️ Disclaimer
+
+**🚧 WORK IN PROGRESS 🚧**
+
+This project is currently under active development and should be considered **BETA SOFTWARE**. 
+
+### Current Status:
+- ✅ Core ServUO server deployment
+- 🚧 Telnet console integration (testing phase)
+- 🚧 Web map interface (development phase)
+- 🚧 Advanced configuration options (planned)
+
+### Important Notes:
+- **Not recommended for production use** without thorough testing
+- Features may change without notice
+- Some documented features may not be fully implemented yet
+- Breaking changes may occur between versions
+- Limited testing on all ARM platforms
+
+### What to Expect:
+- 🐛 Potential bugs and stability issues
+- 📝 Incomplete or changing documentation
+- 🔄 Frequent updates and improvements
+- 💬 Active development and community feedback integration
+
+**Use at your own risk. Always backup your data before updates.**
+
+For stable production deployments, please wait for the v1.0.0 release or use the official ServUO installation methods.
+
+---
