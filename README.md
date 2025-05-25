@@ -1,6 +1,5 @@
 # ServUO ARM Docker Container
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/aplayerv1/arm-serv)](https://hub.docker.com/r/aplayerv1/arm-serv)
 [![GitHub Issues](https://img.shields.io/github/issues/aplayerv1/arm-serv)](https://github.com/aplayerv1/arm-serv/issues)
 [![GitHub License](https://img.shields.io/github/license/aplayerv1/arm-serv)](https://github.com/aplayerv1/arm-serv/blob/main/LICENSE)
 
@@ -8,7 +7,6 @@ A Docker container for running ServUO (Ultima Online server emulator) on ARM arc
 
 ## 🚀 Features
 
-- ✅ ARM architecture support (ARM64, ARMv7)
 - 🐳 Easy deployment with Docker Compose
 - 🌍 Configurable timezone
 - 👤 Admin account setup via environment variables
