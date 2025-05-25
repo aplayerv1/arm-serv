@@ -18,9 +18,9 @@ A Docker container for running ServUO (Ultima Online server emulator) on ARM arc
 
 - Docker Engine 20.10+
 - Docker Compose 2.0+
-- ARM-based system (Raspberry Pi 3+, ARM64 server, etc.)
+- x64-based system
 - Minimum 1GB RAM recommended
-
+- arm(64) or armv7l (32-bit) architecture PLANNED
 ## 🛠️ Quick Start
 
 ### 1. Clone the Repository
