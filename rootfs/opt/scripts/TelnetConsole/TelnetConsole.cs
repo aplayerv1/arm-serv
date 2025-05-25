@@ -467,7 +467,6 @@ namespace Server.Custom
                             }
                             else
                             {
-                                session.Writer.WriteLine("Usage: setaccess <username> <accessl
                                 session.Writer.WriteLine("Usage: setaccess <username> <accesslevel>");
                             }
                             break;
