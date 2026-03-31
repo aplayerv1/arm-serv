@@ -379,71 +379,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-Create the .gitignore file:
 
-```gitignore:.gitignore
-# Docker volumes and data
-servuo/
-data/
-logs/
-
-# Docker Compose files
-docker-compose.yml
-docker-compose.override.yml
-docker-compose.override.yaml
-
-# Environment files
-.env
-.env.local
-.env.*.local
-*.env
-
-# Backup files
-backup-*.tar.gz
-*.backup
-*.bak
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-desktop.ini
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.project
-.classpath
-.settings/
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
-.temp/
-
-# Docker
-.dockerignore
-```
 ## 🌐 Additional Features
 
 ### Telnet Console Access
